@@ -1,0 +1,17 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Sensitive data
+old/
+*.pdf
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/

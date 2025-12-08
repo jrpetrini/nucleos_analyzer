@@ -1,0 +1,7 @@
+pypdf>=6.4.0
+pandas>=2.0.0
+dash>=2.14.0
+plotly>=5.18.0
+pyxirr>=0.10.0
+bizdays>=1.0.0
+scipy>=1.10.0
