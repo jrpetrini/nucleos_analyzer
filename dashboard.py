@@ -51,6 +51,66 @@ OVERHEAD_OPTIONS = [
     {'label': '+10%', 'value': 10},
 ]
 
+# Help texts
+HELP_TEXTS = {
+    'benchmark': 'Compare sua carteira com índices de mercado. O benchmark simula quanto você teria se tivesse investido as mesmas contribuições no índice selecionado.',
+    'overhead': 'Adiciona um retorno extra anual ao benchmark. Ex: INPC +4% simula um investimento que rende INPC mais 4% ao ano.',
+    'cagr_nucleos': 'CAGR (Taxa de Crescimento Anual Composta) calculada usando XIRR com dias úteis brasileiros (252 dias/ano). Representa o retorno anualizado considerando todas as contribuições e suas datas exatas.',
+    'cagr_benchmark': 'CAGR do benchmark selecionado, calculada da mesma forma que o Nucleos para comparação justa.',
+    'company_as_mine': 'Quando ativado, considera as contribuições da empresa como "de graça" - você recebe o patrimônio total mas só contabiliza o que saiu do seu bolso. Isso mostra o retorno real sobre seu dinheiro.',
+}
+
+
+def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
+    """Create a help icon with hover tooltip using CSS."""
+    return html.Div([
+        html.Span(
+            '?',
+            className='help-icon',
+            style={
+                'display': 'inline-flex',
+                'alignItems': 'center',
+                'justifyContent': 'center',
+                'width': '16px',
+                'height': '16px',
+                'borderRadius': '50%',
+                'backgroundColor': COLORS['grid'],
+                'color': COLORS['text_muted'],
+                'fontSize': '11px',
+                'fontWeight': 'bold',
+                'cursor': 'help',
+                'marginLeft': '6px',
+            }
+        ),
+        html.Div(
+            help_text,
+            className='help-tooltip',
+            style={
+                'visibility': 'hidden',
+                'opacity': '0',
+                'position': 'absolute',
+                'backgroundColor': COLORS['card'],
+                'color': COLORS['text'],
+                'padding': '8px 12px',
+                'borderRadius': '6px',
+                'fontSize': '12px',
+                'maxWidth': '280px',
+                'boxShadow': '0 4px 6px rgba(0,0,0,0.3)',
+                'zIndex': '1000',
+                'top': '100%',
+                'left': '50%',
+                'transform': 'translateX(-50%)',
+                'marginTop': '5px',
+                'transition': 'opacity 0.2s, visibility 0.2s',
+                'whiteSpace': 'normal',
+                'lineHeight': '1.4',
+            }
+        )
+    ], style={
+        'display': 'inline-block',
+        'position': 'relative',
+    }, className='help-container')
+
 
 def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
                            date_range: tuple = None,
@@ -136,22 +196,48 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
     return fig
 
 
-def create_contributions_figure(df_contributions: pd.DataFrame) -> go.Figure:
-    """Create the contributions bar chart."""
+def create_contributions_figure(df_contributions: pd.DataFrame,
+                                 show_split: bool = False,
+                                 date_range: tuple = None) -> go.Figure:
+    """Create the contributions bar chart (stacked or combined)."""
     fig = go.Figure()
 
-    fig.add_trace(go.Bar(
-        x=df_contributions['data'],
-        y=df_contributions['contribuicao_total'],
-        name='Contribuição Mensal',
-        marker_color=COLORS['participant'],
-        hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição: R$ %{y:,.2f}<extra></extra>'
-    ))
+    df = df_contributions.copy()
+    if date_range and date_range[0] and date_range[1]:
+        df = df[(df['data'] >= date_range[0]) & (df['data'] <= date_range[1])]
 
-    # Add cumulative line
+    if show_split and 'contrib_participante' in df.columns:
+        # Stacked bar chart
+        fig.add_trace(go.Bar(
+            x=df['data'],
+            y=df['contrib_participante'],
+            name='Participante',
+            marker_color=COLORS['participant'],
+            hovertemplate='<b>%{x|%b %Y}</b><br>Participante: R$ %{y:,.2f}<extra></extra>'
+        ))
+        fig.add_trace(go.Bar(
+            x=df['data'],
+            y=df['contrib_patrocinador'],
+            name='Patrocinador',
+            marker_color=COLORS['sponsor'],
+            hovertemplate='<b>%{x|%b %Y}</b><br>Patrocinador: R$ %{y:,.2f}<extra></extra>'
+        ))
+        fig.update_layout(barmode='stack')
+    else:
+        # Combined bar chart
+        fig.add_trace(go.Bar(
+            x=df['data'],
+            y=df['contribuicao_total'],
+            name='Contribuição Mensal',
+            marker_color=COLORS['participant'],
+            hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição: R$ %{y:,.2f}<extra></extra>'
+        ))
+
+    # Add cumulative line (recalculate for filtered data)
+    df_cumsum = df['contribuicao_total'].cumsum() if date_range else df['contribuicao_acumulada']
     fig.add_trace(go.Scatter(
-        x=df_contributions['data'],
-        y=df_contributions['contribuicao_acumulada'],
+        x=df['data'],
+        y=df_cumsum if not date_range else df['contribuicao_total'].cumsum(),
         mode='lines+markers',
         name='Total Acumulado',
         line=dict(color=COLORS['accent'], width=3),
@@ -238,7 +324,7 @@ def create_app(df_position: pd.DataFrame,
 
     # Pre-create figures
     initial_position_fig = create_position_figure(df_position, log_scale=False)
-    contributions_fig = create_contributions_figure(df_contributions_monthly)
+    contributions_fig = create_contributions_figure(df_contributions_monthly, show_split=False)
 
     # Date range for benchmark fetching
     start_date_str = df_contributions_raw['data'].min().strftime('%Y-%m-%d')
@@ -262,6 +348,23 @@ def create_app(df_position: pd.DataFrame,
             'backgroundColor': COLORS['background']
         }),
 
+        # Global toggle - Company contributions as mine
+        html.Div([
+            html.Div([
+                dcc.Checklist(
+                    id='company-as-mine-toggle',
+                    options=[{'label': ' Considerar contribuições da empresa como sem custo', 'value': 'as_mine'}],
+                    value=[],  # Default: OFF (count company contributions as invested)
+                    style={'color': COLORS['text']},
+                    labelStyle={'display': 'flex', 'alignItems': 'center'}
+                ),
+                create_help_icon(HELP_TEXTS['company_as_mine'], 'help-company-toggle'),
+            ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'})
+        ], style={
+            'padding': '0 2rem 1rem 2rem',
+            'backgroundColor': COLORS['background']
+        }),
+
         # Summary Cards
         html.Div([
             html.Div([
@@ -275,8 +378,10 @@ def create_app(df_position: pd.DataFrame,
                 'textAlign': 'center'
             }),
             html.Div([
-                html.P('Total Investido', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
-                html.H2(f'R$ {stats["total_contributed"]:,.2f}', style={'color': COLORS['participant'], 'margin': '0.5rem 0'})
+                html.Div([
+                    html.P('Total Investido', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
+                ]),
+                html.H2(id='total-invested-value', style={'color': COLORS['participant'], 'margin': '0.5rem 0'})
             ], style={
                 'backgroundColor': COLORS['card'],
                 'padding': '1.5rem',
@@ -285,16 +390,14 @@ def create_app(df_position: pd.DataFrame,
                 'textAlign': 'center'
             }),
             html.Div([
-                html.P('Rendimento Nucleos (CAGR)', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
-                html.H2(f'{stats["cagr_pct"]:+.2f}% a.a.' if stats["cagr_pct"] is not None else 'N/A', style={
-                    'color': COLORS['accent'] if (stats["cagr_pct"] or 0) >= 0 else '#ef4444',
-                    'margin': '0.5rem 0'
-                }),
-                html.P(f'R$ {stats["total_return"]:,.2f} total', style={
-                    'color': COLORS['accent'] if stats["total_return"] >= 0 else '#ef4444',
-                    'margin': '0',
-                    'fontSize': '0.875rem'
-                })
+                html.Div([
+                    html.P([
+                        'Rendimento Nucleos (CAGR)',
+                        create_help_icon(HELP_TEXTS['cagr_nucleos'], 'help-cagr-nucleos')
+                    ], style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem', 'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'}),
+                ]),
+                html.H2(id='nucleos-cagr-value', style={'margin': '0.5rem 0'}),
+                html.P(id='nucleos-return-value', style={'margin': '0', 'fontSize': '0.875rem'})
             ], style={
                 'backgroundColor': COLORS['card'],
                 'padding': '1.5rem',
@@ -304,7 +407,12 @@ def create_app(df_position: pd.DataFrame,
             }),
             # Benchmark CAGR card
             html.Div(id='benchmark-cagr-card', children=[
-                html.P('Rendimento Benchmark', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
+                html.Div([
+                    html.P([
+                        'Rendimento Benchmark',
+                        create_help_icon(HELP_TEXTS['cagr_benchmark'], 'help-cagr-benchmark')
+                    ], style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem', 'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'}),
+                ]),
                 html.H2(id='benchmark-cagr-value', children='--', style={
                     'color': COLORS['text_muted'],
                     'margin': '0.5rem 0'
@@ -326,6 +434,33 @@ def create_app(df_position: pd.DataFrame,
             'gap': '1rem',
             'padding': '0 2rem',
             'marginBottom': '2rem',
+            'backgroundColor': COLORS['background']
+        }),
+
+        # Shared controls (persist between tabs)
+        html.Div([
+            html.Div([
+                html.Label('De:', style={'color': COLORS['text'], 'marginRight': '0.5rem'}),
+                dcc.Dropdown(
+                    id='start-month',
+                    options=month_options,
+                    value=min_date.isoformat(),
+                    clearable=False,
+                    style={'width': '130px', 'color': '#000'}
+                ),
+                html.Label('Até:', style={'color': COLORS['text'], 'margin': '0 0.5rem 0 1rem'}),
+                dcc.Dropdown(
+                    id='end-month',
+                    options=month_options,
+                    value=max_date.isoformat(),
+                    clearable=False,
+                    style={'width': '130px', 'color': '#000'}
+                )
+            ], style={'display': 'flex', 'alignItems': 'center'})
+        ], style={
+            'display': 'flex',
+            'justifyContent': 'center',
+            'padding': '0 2rem 1rem 2rem',
             'backgroundColor': COLORS['background']
         }),
 
@@ -373,27 +508,9 @@ def create_app(df_position: pd.DataFrame,
                         labelStyle={'marginRight': '1rem'}
                     )
                 ], style={'display': 'flex', 'alignItems': 'center'}),
-                html.Div([
-                    html.Label('De:', style={'color': COLORS['text'], 'marginRight': '0.5rem'}),
-                    dcc.Dropdown(
-                        id='start-month',
-                        options=month_options,
-                        value=min_date.isoformat(),
-                        clearable=False,
-                        style={'width': '130px', 'color': '#000'}
-                    ),
-                    html.Label('Até:', style={'color': COLORS['text'], 'margin': '0 0.5rem 0 1rem'}),
-                    dcc.Dropdown(
-                        id='end-month',
-                        options=month_options,
-                        value=max_date.isoformat(),
-                        clearable=False,
-                        style={'width': '130px', 'color': '#000'}
-                    )
-                ], style={'display': 'flex', 'alignItems': 'center'})
             ], style={
                 'display': 'flex',
-                'justifyContent': 'space-between',
+                'justifyContent': 'flex-start',
                 'marginBottom': '1rem',
                 'flexWrap': 'wrap',
                 'gap': '1rem'
@@ -408,6 +525,7 @@ def create_app(df_position: pd.DataFrame,
                     clearable=False,
                     style={'width': '150px', 'color': '#000'}
                 ),
+                create_help_icon(HELP_TEXTS['benchmark'], 'help-benchmark'),
                 html.Label('Overhead:', style={'color': COLORS['text'], 'margin': '0 0.5rem 0 1rem'}),
                 dcc.Dropdown(
                     id='overhead-select',
@@ -416,6 +534,7 @@ def create_app(df_position: pd.DataFrame,
                     clearable=False,
                     style={'width': '100px', 'color': '#000'}
                 ),
+                create_help_icon(HELP_TEXTS['overhead'], 'help-overhead'),
             ], style={
                 'display': 'flex',
                 'alignItems': 'center',
@@ -452,8 +571,10 @@ def create_app(df_position: pd.DataFrame,
         # Store data for callbacks
         dcc.Store(id='position-data', data=df_position.to_dict('records')),
         dcc.Store(id='contributions-data', data=df_contributions_raw.to_dict('records')),
+        dcc.Store(id='contributions-monthly-data', data=df_contributions_monthly.to_dict('records')),
         dcc.Store(id='date-range-data', data={'start': start_date_str, 'end': end_date_str}),
-        dcc.Store(id='benchmark-cache', data={}),  # Cache fetched benchmark data
+        dcc.Store(id='benchmark-cache', data={}),
+        dcc.Store(id='stats-data', data=stats),
 
     ], style={
         'backgroundColor': COLORS['background'],
@@ -480,6 +601,64 @@ def create_app(df_position: pd.DataFrame,
             'display': 'block' if tab == 'contributions' else 'none'
         }
         return position_style, contributions_style
+
+    @callback(
+        Output('total-invested-value', 'children'),
+        Output('nucleos-cagr-value', 'children'),
+        Output('nucleos-cagr-value', 'style'),
+        Output('nucleos-return-value', 'children'),
+        Output('nucleos-return-value', 'style'),
+        Input('company-as-mine-toggle', 'value'),
+        State('contributions-data', 'data'),
+        State('position-data', 'data'),
+    )
+    def update_nucleos_stats(company_as_mine, contributions_data, position_data):
+        df_contrib = pd.DataFrame(contributions_data)
+        df_contrib['data'] = pd.to_datetime(df_contrib['data'])
+        df_pos = pd.DataFrame(position_data)
+        df_pos['data'] = pd.to_datetime(df_pos['data'])
+
+        # Toggle ON = company as mine = only participant contributions count as invested
+        # Toggle OFF = all contributions count as invested
+        treat_company_as_mine = 'as_mine' in (company_as_mine or [])
+
+        if treat_company_as_mine:
+            # Company contributions are "free money" - only MY contributions count
+            if 'contrib_participante' in df_contrib.columns:
+                total_invested = df_contrib['contrib_participante'].sum()
+                amounts_for_xirr = df_contrib['contrib_participante'].tolist()
+            else:
+                total_invested = df_contrib['contribuicao_total'].sum()
+                amounts_for_xirr = df_contrib['contribuicao_total'].tolist()
+        else:
+            # All contributions count as invested
+            total_invested = df_contrib['contribuicao_total'].sum()
+            amounts_for_xirr = df_contrib['contribuicao_total'].tolist()
+
+        last_position = df_pos['posicao'].iloc[-1]
+        total_return = last_position - total_invested
+
+        # Calculate XIRR
+        from calculator import xirr_bizdays
+        dates = df_contrib['data'].tolist() + [df_pos['data'].iloc[-1]]
+        amounts = [-amt for amt in amounts_for_xirr] + [last_position]
+        cagr = xirr_bizdays(dates, amounts)
+        cagr_pct = cagr * 100 if cagr is not None else None
+
+        invested_text = f'R$ {total_invested:,.2f}'
+        cagr_text = f'{cagr_pct:+.2f}% a.a.' if cagr_pct is not None else 'N/A'
+        return_text = f'R$ {total_return:,.2f} total'
+
+        cagr_color = COLORS['accent'] if (cagr_pct or 0) >= 0 else '#ef4444'
+        return_color = COLORS['accent'] if total_return >= 0 else '#ef4444'
+
+        return (
+            invested_text,
+            cagr_text,
+            {'color': cagr_color, 'margin': '0.5rem 0'},
+            return_text,
+            {'color': return_color, 'margin': '0', 'fontSize': '0.875rem'}
+        )
 
     @callback(
         Output('position-graph', 'figure'),
@@ -536,24 +715,29 @@ def create_app(df_position: pd.DataFrame,
                 else:
                     benchmark_label = benchmark_name
 
+                # Benchmark ALWAYS uses total contributions (participant + patrocinador)
+                # The toggle only affects Nucleos CAGR calculation, not benchmark
+                contrib_amounts = df_contrib['contribuicao_total']
+
+                # Create a temporary df for simulation
+                df_contrib_sim = df_contrib[['data']].copy()
+                df_contrib_sim['contribuicao_total'] = contrib_amounts
+
                 # Simulate benchmark
                 benchmark_sim = simulate_benchmark(
-                    df_contrib,
+                    df_contrib_sim,
                     benchmark_with_overhead,
                     df[['data']]
                 )
 
-                # Calculate benchmark CAGR (simple: final / initial - expressed as return)
+                # Calculate benchmark CAGR (always using total contributions)
                 if not benchmark_sim.empty and len(benchmark_sim) > 1:
                     final_value = benchmark_sim['posicao'].iloc[-1]
-                    total_contrib = df_contrib['contribuicao_total'].sum()
-                    bench_return = final_value - total_contrib
 
-                    # For CAGR we need XIRR-like calculation
                     from calculator import xirr_bizdays
                     last_date = df['data'].iloc[-1]
                     dates = df_contrib['data'].tolist() + [last_date]
-                    amounts = [-amt for amt in df_contrib['contribuicao_total'].tolist()] + [final_value]
+                    amounts = [-amt for amt in contrib_amounts.tolist()] + [final_value]
                     bench_cagr = xirr_bizdays(dates, amounts)
 
                     if bench_cagr is not None:
@@ -575,5 +759,22 @@ def create_app(df_position: pd.DataFrame,
         )
 
         return fig, benchmark_cagr_text, benchmark_cagr_style, benchmark_label_text, cache
+
+    @callback(
+        Output('contributions-graph', 'figure'),
+        Input('company-as-mine-toggle', 'value'),
+        Input('start-month', 'value'),
+        Input('end-month', 'value'),
+        State('contributions-monthly-data', 'data')
+    )
+    def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data):
+        df = pd.DataFrame(monthly_data)
+        df['data'] = pd.to_datetime(df['data'])
+
+        # Show split when toggle is ON (company as mine = show what's yours vs theirs)
+        treat_company_as_mine = 'as_mine' in (company_as_mine or [])
+        show_split = treat_company_as_mine
+
+        return create_contributions_figure(df, show_split=show_split, date_range=(start_date, end_date))
 
     return app

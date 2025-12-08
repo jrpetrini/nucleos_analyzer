@@ -97,7 +97,7 @@ def process_contributions_data(df_contributions: pd.DataFrame) -> pd.DataFrame:
         df_contributions: Contributions dataframe from extract_data_from_pdf
 
     Returns:
-        DataFrame with monthly contribution totals and cumulative sum
+        DataFrame with monthly contribution totals (participant/patrocinador) and cumulative sums
     """
     if df_contributions.empty:
         return df_contributions
@@ -105,11 +105,21 @@ def process_contributions_data(df_contributions: pd.DataFrame) -> pd.DataFrame:
     df = df_contributions.copy()
     # Aggregate by month for chart display
     df['mes'] = df['data'].dt.to_period('M').dt.to_timestamp(how='end')
-    df_monthly = df.groupby('mes').agg({
-        'contribuicao_total': 'sum'
-    }).reset_index()
+
+    agg_dict = {'contribuicao_total': 'sum'}
+    if 'contrib_participante' in df.columns:
+        agg_dict['contrib_participante'] = 'sum'
+    if 'contrib_patrocinador' in df.columns:
+        agg_dict['contrib_patrocinador'] = 'sum'
+
+    df_monthly = df.groupby('mes').agg(agg_dict).reset_index()
     df_monthly = df_monthly.rename(columns={'mes': 'data'})
     df_monthly['contribuicao_acumulada'] = df_monthly['contribuicao_total'].cumsum()
+
+    if 'contrib_participante' in df_monthly.columns:
+        df_monthly['contrib_participante_acum'] = df_monthly['contrib_participante'].cumsum()
+    if 'contrib_patrocinador' in df_monthly.columns:
+        df_monthly['contrib_patrocinador_acum'] = df_monthly['contrib_patrocinador'].cumsum()
 
     return df_monthly
 

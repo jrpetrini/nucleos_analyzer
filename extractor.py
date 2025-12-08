@@ -108,7 +108,8 @@ def extract_data_from_pdf(file_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
             # Determine transaction type
             is_contribution = 'CONTRIB' in row and quotas > 0
-            is_participant = 'PARTICIPANTE' in row
+            # Match both full ("PARTICIPANTE") and abbreviated ("PARTICIP") forms
+            is_participant = 'PARTICIPANTE' in row or ('PARTICIP' in row and 'PATROC' not in row)
 
             row_map[f'{page_num}-{row_num}'] = {
                 'mes_ano': mes_ano,
@@ -131,14 +132,41 @@ def extract_data_from_pdf(file_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Build contributions dataframe with exact dates
     if contributions_list:
         df_contrib_raw = pd.DataFrame(contributions_list)
-        # Group by exact date and aggregate
-        df_contributions = df_contrib_raw.groupby('data_exata').agg({
+
+        # Group by exact date and type, then pivot to get participant/patrocinador columns
+        df_by_type = df_contrib_raw.groupby(['data_exata', 'tipo']).agg({
             'mes_ano': 'first',
             'valor': 'sum'
         }).reset_index()
-        df_contributions = df_contributions.rename(columns={'valor': 'contribuicao_total', 'data_exata': 'data'})
+
+        # Pivot to get separate columns
+        df_pivot = df_by_type.pivot_table(
+            index=['data_exata', 'mes_ano'],
+            columns='tipo',
+            values='valor',
+            fill_value=0
+        ).reset_index()
+
+        df_contributions = df_pivot.rename(columns={
+            'data_exata': 'data',
+            'participante': 'contrib_participante',
+            'patrocinador': 'contrib_patrocinador'
+        })
+
+        # Ensure columns exist
+        if 'contrib_participante' not in df_contributions.columns:
+            df_contributions['contrib_participante'] = 0
+        if 'contrib_patrocinador' not in df_contributions.columns:
+            df_contributions['contrib_patrocinador'] = 0
+
+        df_contributions['contribuicao_total'] = (
+            df_contributions['contrib_participante'] +
+            df_contributions['contrib_patrocinador']
+        )
         df_contributions = df_contributions.sort_values('data').reset_index(drop=True)
         df_contributions['contribuicao_acumulada'] = df_contributions['contribuicao_total'].cumsum()
+        df_contributions['contrib_participante_acum'] = df_contributions['contrib_participante'].cumsum()
+        df_contributions['contrib_patrocinador_acum'] = df_contributions['contrib_patrocinador'].cumsum()
     else:
         df_contributions = pd.DataFrame()
 

@@ -1,0 +1,10 @@
+/* Hover tooltip styles */
+.help-container:hover .help-tooltip {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.help-icon:hover {
+    background-color: #475569 !important;
+    color: #f1f5f9 !important;
+}
