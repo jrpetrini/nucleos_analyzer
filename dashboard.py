@@ -23,10 +23,21 @@ COLORS = {
     'grid': '#334155',         # Slate 700
 }
 
+# Benchmark colors
+BENCHMARK_COLORS = {
+    'CDI': '#22c55e',          # Green
+    'IPCA': '#ef4444',         # Red
+    'INPC': '#f97316',         # Orange
+    'S&P 500': '#3b82f6',      # Blue
+    'USD': '#a855f7',          # Purple
+}
+
 
 def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
-                           date_range: tuple = None) -> go.Figure:
-    """Create the position line chart."""
+                           date_range: tuple = None,
+                           benchmark_simulations: dict = None,
+                           selected_benchmarks: list = None) -> go.Figure:
+    """Create the position line chart with optional benchmark comparisons."""
     df = df_position.copy()
 
     if date_range and date_range[0] and date_range[1]:
@@ -34,19 +45,44 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
 
     fig = go.Figure()
 
+    # Main position line
     fig.add_trace(go.Scatter(
         x=df['data'],
         y=df['posicao'],
         mode='lines+markers',
-        name='Posição',
+        name='Nucleos',
         line=dict(color=COLORS['primary'], width=3),
         marker=dict(size=8, color=COLORS['primary']),
-        hovertemplate='<b>%{x|%b %Y}</b><br>Posição: R$ %{y:,.2f}<extra></extra>'
+        hovertemplate='<b>%{x|%b %Y}</b><br>Nucleos: R$ %{y:,.2f}<extra></extra>'
     ))
+
+    # Add benchmark curves
+    if benchmark_simulations and selected_benchmarks:
+        for bench_name in selected_benchmarks:
+            if bench_name in benchmark_simulations:
+                bench_df = benchmark_simulations[bench_name].copy()
+                bench_df['data'] = pd.to_datetime(bench_df['data'])
+
+                if date_range and date_range[0] and date_range[1]:
+                    bench_df = bench_df[
+                        (bench_df['data'] >= date_range[0]) &
+                        (bench_df['data'] <= date_range[1])
+                    ]
+
+                color = BENCHMARK_COLORS.get(bench_name, '#888888')
+                fig.add_trace(go.Scatter(
+                    x=bench_df['data'],
+                    y=bench_df['posicao'],
+                    mode='lines+markers',
+                    name=bench_name,
+                    line=dict(color=color, width=2, dash='dash'),
+                    marker=dict(size=5, color=color),
+                    hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{bench_name}: R$ %{{y:,.2f}}<extra></extra>'
+                ))
 
     fig.update_layout(
         title=dict(
-            text='Evolução da Posição',
+            text='Evolução da Posição vs Benchmarks',
             font=dict(size=24, color=COLORS['text']),
             x=0.5
         ),
@@ -67,6 +103,14 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
         paper_bgcolor=COLORS['background'],
         hovermode='x unified',
         margin=dict(l=80, r=40, t=80, b=60),
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='center',
+            x=0.5,
+            font=dict(color=COLORS['text'])
+        )
     )
 
     return fig
@@ -141,7 +185,8 @@ def create_contributions_figure(df_contributions: pd.DataFrame) -> go.Figure:
 
 def create_app(df_position: pd.DataFrame,
                df_contributions_raw: pd.DataFrame,
-               df_contributions_monthly: pd.DataFrame) -> Dash:
+               df_contributions_monthly: pd.DataFrame,
+               benchmark_simulations: dict = None) -> Dash:
     """
     Create the Dash application.
 
@@ -149,6 +194,7 @@ def create_app(df_position: pd.DataFrame,
         df_position: Processed position data
         df_contributions_raw: Raw contributions with exact dates (for XIRR)
         df_contributions_monthly: Monthly aggregated contributions (for charts)
+        benchmark_simulations: Dictionary mapping benchmark names to simulated DataFrames
 
     Returns:
         Configured Dash application
@@ -157,6 +203,9 @@ def create_app(df_position: pd.DataFrame,
 
     min_date = df_position['data'].min()
     max_date = df_position['data'].max()
+
+    # Available benchmarks
+    available_benchmarks = list(benchmark_simulations.keys()) if benchmark_simulations else []
 
     # Create month options for dropdowns
     month_options = [
@@ -168,8 +217,18 @@ def create_app(df_position: pd.DataFrame,
     stats = calculate_summary_stats(df_position, df_contributions_raw, df_contributions_monthly)
 
     # Pre-create figures
-    initial_position_fig = create_position_figure(df_position, log_scale=False)
+    initial_position_fig = create_position_figure(
+        df_position, log_scale=False,
+        benchmark_simulations=benchmark_simulations,
+        selected_benchmarks=available_benchmarks  # Show all by default
+    )
     contributions_fig = create_contributions_figure(df_contributions_monthly)
+
+    # Serialize benchmark data for callback
+    benchmark_data_store = {}
+    if benchmark_simulations:
+        for name, df in benchmark_simulations.items():
+            benchmark_data_store[name] = df.to_dict('records')
 
     app.layout = html.Div([
         # Header
@@ -265,7 +324,7 @@ def create_app(df_position: pd.DataFrame,
 
         # Position Tab Content
         html.Div(id='position-tab', children=[
-            # Controls
+            # Controls Row 1
             html.Div([
                 html.Div([
                     html.Label('Escala Y:', style={'color': COLORS['text'], 'marginRight': '1rem'}),
@@ -306,6 +365,24 @@ def create_app(df_position: pd.DataFrame,
                 'flexWrap': 'wrap',
                 'gap': '1rem'
             }),
+            # Controls Row 2 - Benchmarks
+            html.Div([
+                html.Label('Comparar com:', style={'color': COLORS['text'], 'marginRight': '1rem'}),
+                dcc.Checklist(
+                    id='benchmark-select',
+                    options=[{'label': f' {name}', 'value': name} for name in available_benchmarks],
+                    value=available_benchmarks,  # All selected by default
+                    inline=True,
+                    style={'color': COLORS['text']},
+                    labelStyle={'marginRight': '1.5rem'}
+                )
+            ], style={
+                'display': 'flex' if available_benchmarks else 'none',
+                'alignItems': 'center',
+                'marginBottom': '1rem',
+                'flexWrap': 'wrap',
+                'gap': '0.5rem'
+            }),
             # Graph
             dcc.Graph(id='position-graph', figure=initial_position_fig, style={'height': '500px'})
         ], style={
@@ -327,6 +404,7 @@ def create_app(df_position: pd.DataFrame,
 
         # Store data for callbacks
         dcc.Store(id='position-data', data=df_position.to_dict('records')),
+        dcc.Store(id='benchmark-data', data=benchmark_data_store),
 
     ], style={
         'backgroundColor': COLORS['background'],
@@ -359,15 +437,26 @@ def create_app(df_position: pd.DataFrame,
         Input('scale-toggle', 'value'),
         Input('start-month', 'value'),
         Input('end-month', 'value'),
-        Input('position-data', 'data')
+        Input('benchmark-select', 'value'),
+        Input('position-data', 'data'),
+        Input('benchmark-data', 'data')
     )
-    def update_position_graph(scale, start_date, end_date, data):
+    def update_position_graph(scale, start_date, end_date, selected_benchmarks, data, bench_data):
         df = pd.DataFrame(data)
         df['data'] = pd.to_datetime(df['data'])
+
+        # Reconstruct benchmark simulations from stored data
+        benchmark_sims = {}
+        if bench_data:
+            for name, records in bench_data.items():
+                benchmark_sims[name] = pd.DataFrame(records)
+
         return create_position_figure(
             df,
             log_scale=(scale == 'log'),
-            date_range=(start_date, end_date)
+            date_range=(start_date, end_date),
+            benchmark_simulations=benchmark_sims,
+            selected_benchmarks=selected_benchmarks or []
         )
 
     return app

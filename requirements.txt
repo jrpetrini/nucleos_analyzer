@@ -5,3 +5,5 @@ plotly>=5.18.0
 pyxirr>=0.10.0
 bizdays>=1.0.0
 scipy>=1.10.0
+yfinance>=0.2.0
+python-bcb>=0.2.0
