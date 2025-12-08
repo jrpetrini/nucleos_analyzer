@@ -5,9 +5,13 @@ Dashboard UI components for Nucleos Analyzer.
 
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, dcc, html, callback, Output, Input
+from dash import Dash, dcc, html, callback, Output, Input, State
 
 from calculator import calculate_summary_stats
+from benchmarks import (
+    AVAILABLE_BENCHMARKS, fetch_single_benchmark, apply_overhead_to_benchmark,
+    simulate_benchmark
+)
 
 # Color palette
 COLORS = {
@@ -32,12 +36,27 @@ BENCHMARK_COLORS = {
     'USD': '#a855f7',          # Purple
 }
 
+# Overhead options
+OVERHEAD_OPTIONS = [
+    {'label': '+0%', 'value': 0},
+    {'label': '+1%', 'value': 1},
+    {'label': '+2%', 'value': 2},
+    {'label': '+3%', 'value': 3},
+    {'label': '+4%', 'value': 4},
+    {'label': '+5%', 'value': 5},
+    {'label': '+6%', 'value': 6},
+    {'label': '+7%', 'value': 7},
+    {'label': '+8%', 'value': 8},
+    {'label': '+9%', 'value': 9},
+    {'label': '+10%', 'value': 10},
+]
+
 
 def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
                            date_range: tuple = None,
-                           benchmark_simulations: dict = None,
-                           selected_benchmarks: list = None) -> go.Figure:
-    """Create the position line chart with optional benchmark comparisons."""
+                           benchmark_sim: pd.DataFrame = None,
+                           benchmark_label: str = None) -> go.Figure:
+    """Create the position line chart with optional benchmark comparison."""
     df = df_position.copy()
 
     if date_range and date_range[0] and date_range[1]:
@@ -56,33 +75,34 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
         hovertemplate='<b>%{x|%b %Y}</b><br>Nucleos: R$ %{y:,.2f}<extra></extra>'
     ))
 
-    # Add benchmark curves
-    if benchmark_simulations and selected_benchmarks:
-        for bench_name in selected_benchmarks:
-            if bench_name in benchmark_simulations:
-                bench_df = benchmark_simulations[bench_name].copy()
-                bench_df['data'] = pd.to_datetime(bench_df['data'])
+    # Add benchmark curve if available
+    if benchmark_sim is not None and not benchmark_sim.empty and benchmark_label:
+        bench_df = benchmark_sim.copy()
+        bench_df['data'] = pd.to_datetime(bench_df['data'])
 
-                if date_range and date_range[0] and date_range[1]:
-                    bench_df = bench_df[
-                        (bench_df['data'] >= date_range[0]) &
-                        (bench_df['data'] <= date_range[1])
-                    ]
+        if date_range and date_range[0] and date_range[1]:
+            bench_df = bench_df[
+                (bench_df['data'] >= date_range[0]) &
+                (bench_df['data'] <= date_range[1])
+            ]
 
-                color = BENCHMARK_COLORS.get(bench_name, '#888888')
-                fig.add_trace(go.Scatter(
-                    x=bench_df['data'],
-                    y=bench_df['posicao'],
-                    mode='lines+markers',
-                    name=bench_name,
-                    line=dict(color=color, width=2, dash='dash'),
-                    marker=dict(size=5, color=color),
-                    hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{bench_name}: R$ %{{y:,.2f}}<extra></extra>'
-                ))
+        # Get base benchmark name for color
+        base_name = benchmark_label.split('+')[0].strip()
+        color = BENCHMARK_COLORS.get(base_name, '#888888')
+
+        fig.add_trace(go.Scatter(
+            x=bench_df['data'],
+            y=bench_df['posicao'],
+            mode='lines+markers',
+            name=benchmark_label,
+            line=dict(color=color, width=2, dash='dash'),
+            marker=dict(size=5, color=color),
+            hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{benchmark_label}: R$ %{{y:,.2f}}<extra></extra>'
+        ))
 
     fig.update_layout(
         title=dict(
-            text='Evolução da Posição vs Benchmarks',
+            text='Evolução da Posição',
             font=dict(size=24, color=COLORS['text']),
             x=0.5
         ),
@@ -185,8 +205,7 @@ def create_contributions_figure(df_contributions: pd.DataFrame) -> go.Figure:
 
 def create_app(df_position: pd.DataFrame,
                df_contributions_raw: pd.DataFrame,
-               df_contributions_monthly: pd.DataFrame,
-               benchmark_simulations: dict = None) -> Dash:
+               df_contributions_monthly: pd.DataFrame) -> Dash:
     """
     Create the Dash application.
 
@@ -194,7 +213,6 @@ def create_app(df_position: pd.DataFrame,
         df_position: Processed position data
         df_contributions_raw: Raw contributions with exact dates (for XIRR)
         df_contributions_monthly: Monthly aggregated contributions (for charts)
-        benchmark_simulations: Dictionary mapping benchmark names to simulated DataFrames
 
     Returns:
         Configured Dash application
@@ -204,31 +222,27 @@ def create_app(df_position: pd.DataFrame,
     min_date = df_position['data'].min()
     max_date = df_position['data'].max()
 
-    # Available benchmarks
-    available_benchmarks = list(benchmark_simulations.keys()) if benchmark_simulations else []
-
     # Create month options for dropdowns
     month_options = [
         {'label': d.strftime('%b %Y'), 'value': d.isoformat()}
         for d in df_position['data']
     ]
 
+    # Benchmark options
+    benchmark_options = [{'label': 'Nenhum', 'value': 'none'}] + [
+        {'label': name, 'value': name} for name in AVAILABLE_BENCHMARKS
+    ]
+
     # Calculate summary stats
     stats = calculate_summary_stats(df_position, df_contributions_raw, df_contributions_monthly)
 
     # Pre-create figures
-    initial_position_fig = create_position_figure(
-        df_position, log_scale=False,
-        benchmark_simulations=benchmark_simulations,
-        selected_benchmarks=available_benchmarks  # Show all by default
-    )
+    initial_position_fig = create_position_figure(df_position, log_scale=False)
     contributions_fig = create_contributions_figure(df_contributions_monthly)
 
-    # Serialize benchmark data for callback
-    benchmark_data_store = {}
-    if benchmark_simulations:
-        for name, df in benchmark_simulations.items():
-            benchmark_data_store[name] = df.to_dict('records')
+    # Date range for benchmark fetching
+    start_date_str = df_contributions_raw['data'].min().strftime('%Y-%m-%d')
+    end_date_str = df_position['data'].max().strftime('%Y-%m-%d')
 
     app.layout = html.Div([
         # Header
@@ -271,13 +285,32 @@ def create_app(df_position: pd.DataFrame,
                 'textAlign': 'center'
             }),
             html.Div([
-                html.P('Rendimento (CAGR)', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
+                html.P('Rendimento Nucleos (CAGR)', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
                 html.H2(f'{stats["cagr_pct"]:+.2f}% a.a.' if stats["cagr_pct"] is not None else 'N/A', style={
                     'color': COLORS['accent'] if (stats["cagr_pct"] or 0) >= 0 else '#ef4444',
                     'margin': '0.5rem 0'
                 }),
                 html.P(f'R$ {stats["total_return"]:,.2f} total', style={
                     'color': COLORS['accent'] if stats["total_return"] >= 0 else '#ef4444',
+                    'margin': '0',
+                    'fontSize': '0.875rem'
+                })
+            ], style={
+                'backgroundColor': COLORS['card'],
+                'padding': '1.5rem',
+                'borderRadius': '0.75rem',
+                'flex': '1',
+                'textAlign': 'center'
+            }),
+            # Benchmark CAGR card
+            html.Div(id='benchmark-cagr-card', children=[
+                html.P('Rendimento Benchmark', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
+                html.H2(id='benchmark-cagr-value', children='--', style={
+                    'color': COLORS['text_muted'],
+                    'margin': '0.5rem 0'
+                }),
+                html.P(id='benchmark-cagr-label', children='Selecione um benchmark', style={
+                    'color': COLORS['text_muted'],
                     'margin': '0',
                     'fontSize': '0.875rem'
                 })
@@ -365,26 +398,40 @@ def create_app(df_position: pd.DataFrame,
                 'flexWrap': 'wrap',
                 'gap': '1rem'
             }),
-            # Controls Row 2 - Benchmarks
+            # Controls Row 2 - Benchmark selection
             html.Div([
-                html.Label('Comparar com:', style={'color': COLORS['text'], 'marginRight': '1rem'}),
-                dcc.Checklist(
+                html.Label('Comparar com:', style={'color': COLORS['text'], 'marginRight': '0.5rem'}),
+                dcc.Dropdown(
                     id='benchmark-select',
-                    options=[{'label': f' {name}', 'value': name} for name in available_benchmarks],
-                    value=available_benchmarks,  # All selected by default
-                    inline=True,
-                    style={'color': COLORS['text']},
-                    labelStyle={'marginRight': '1.5rem'}
-                )
+                    options=benchmark_options,
+                    value='INPC',  # Default to INPC
+                    clearable=False,
+                    style={'width': '150px', 'color': '#000'}
+                ),
+                html.Label('Overhead:', style={'color': COLORS['text'], 'margin': '0 0.5rem 0 1rem'}),
+                dcc.Dropdown(
+                    id='overhead-select',
+                    options=OVERHEAD_OPTIONS,
+                    value=4,  # Default to +4%
+                    clearable=False,
+                    style={'width': '100px', 'color': '#000'}
+                ),
             ], style={
-                'display': 'flex' if available_benchmarks else 'none',
+                'display': 'flex',
                 'alignItems': 'center',
                 'marginBottom': '1rem',
                 'flexWrap': 'wrap',
                 'gap': '0.5rem'
             }),
-            # Graph
-            dcc.Graph(id='position-graph', figure=initial_position_fig, style={'height': '500px'})
+            # Graph with loading indicator
+            dcc.Loading(
+                id='loading-graph',
+                type='circle',
+                color=COLORS['primary'],
+                children=[
+                    dcc.Graph(id='position-graph', figure=initial_position_fig, style={'height': '500px'})
+                ]
+            )
         ], style={
             'padding': '2rem',
             'backgroundColor': COLORS['background'],
@@ -404,7 +451,9 @@ def create_app(df_position: pd.DataFrame,
 
         # Store data for callbacks
         dcc.Store(id='position-data', data=df_position.to_dict('records')),
-        dcc.Store(id='benchmark-data', data=benchmark_data_store),
+        dcc.Store(id='contributions-data', data=df_contributions_raw.to_dict('records')),
+        dcc.Store(id='date-range-data', data={'start': start_date_str, 'end': end_date_str}),
+        dcc.Store(id='benchmark-cache', data={}),  # Cache fetched benchmark data
 
     ], style={
         'backgroundColor': COLORS['background'],
@@ -434,29 +483,97 @@ def create_app(df_position: pd.DataFrame,
 
     @callback(
         Output('position-graph', 'figure'),
+        Output('benchmark-cagr-value', 'children'),
+        Output('benchmark-cagr-value', 'style'),
+        Output('benchmark-cagr-label', 'children'),
+        Output('benchmark-cache', 'data'),
         Input('scale-toggle', 'value'),
         Input('start-month', 'value'),
         Input('end-month', 'value'),
         Input('benchmark-select', 'value'),
-        Input('position-data', 'data'),
-        Input('benchmark-data', 'data')
+        Input('overhead-select', 'value'),
+        State('position-data', 'data'),
+        State('contributions-data', 'data'),
+        State('date-range-data', 'data'),
+        State('benchmark-cache', 'data')
     )
-    def update_position_graph(scale, start_date, end_date, selected_benchmarks, data, bench_data):
-        df = pd.DataFrame(data)
+    def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
+                              position_data, contributions_data, date_range, cache):
+        df = pd.DataFrame(position_data)
         df['data'] = pd.to_datetime(df['data'])
 
-        # Reconstruct benchmark simulations from stored data
-        benchmark_sims = {}
-        if bench_data:
-            for name, records in bench_data.items():
-                benchmark_sims[name] = pd.DataFrame(records)
+        df_contrib = pd.DataFrame(contributions_data)
+        df_contrib['data'] = pd.to_datetime(df_contrib['data'])
 
-        return create_position_figure(
+        benchmark_sim = None
+        benchmark_label = None
+        benchmark_cagr_text = '--'
+        benchmark_cagr_style = {'color': COLORS['text_muted'], 'margin': '0.5rem 0'}
+        benchmark_label_text = 'Selecione um benchmark'
+
+        if benchmark_name and benchmark_name != 'none':
+            # Check cache first
+            cache_key = benchmark_name
+            if cache_key in cache:
+                benchmark_raw = pd.DataFrame(cache[cache_key])
+            else:
+                # Fetch benchmark data
+                benchmark_raw = fetch_single_benchmark(
+                    benchmark_name,
+                    date_range['start'],
+                    date_range['end']
+                )
+                if benchmark_raw is not None:
+                    cache[cache_key] = benchmark_raw.to_dict('records')
+
+            if benchmark_raw is not None:
+                # Apply overhead
+                benchmark_with_overhead = apply_overhead_to_benchmark(benchmark_raw, overhead)
+
+                # Create label
+                if overhead > 0:
+                    benchmark_label = f'{benchmark_name} +{overhead}%'
+                else:
+                    benchmark_label = benchmark_name
+
+                # Simulate benchmark
+                benchmark_sim = simulate_benchmark(
+                    df_contrib,
+                    benchmark_with_overhead,
+                    df[['data']]
+                )
+
+                # Calculate benchmark CAGR (simple: final / initial - expressed as return)
+                if not benchmark_sim.empty and len(benchmark_sim) > 1:
+                    final_value = benchmark_sim['posicao'].iloc[-1]
+                    total_contrib = df_contrib['contribuicao_total'].sum()
+                    bench_return = final_value - total_contrib
+
+                    # For CAGR we need XIRR-like calculation
+                    from calculator import xirr_bizdays
+                    last_date = df['data'].iloc[-1]
+                    dates = df_contrib['data'].tolist() + [last_date]
+                    amounts = [-amt for amt in df_contrib['contribuicao_total'].tolist()] + [final_value]
+                    bench_cagr = xirr_bizdays(dates, amounts)
+
+                    if bench_cagr is not None:
+                        bench_cagr_pct = bench_cagr * 100
+                        benchmark_cagr_text = f'{bench_cagr_pct:+.2f}% a.a.'
+                        color = COLORS['accent'] if bench_cagr_pct >= 0 else '#ef4444'
+                        benchmark_cagr_style = {'color': color, 'margin': '0.5rem 0'}
+                    else:
+                        benchmark_cagr_text = 'N/A'
+
+                    benchmark_label_text = f'{benchmark_label}: R$ {final_value:,.2f}'
+
+        fig = create_position_figure(
             df,
             log_scale=(scale == 'log'),
             date_range=(start_date, end_date),
-            benchmark_simulations=benchmark_sims,
-            selected_benchmarks=selected_benchmarks or []
+            benchmark_sim=benchmark_sim,
+            benchmark_label=benchmark_label
         )
+
+        return fig, benchmark_cagr_text, benchmark_cagr_style, benchmark_label_text, cache
 
     return app

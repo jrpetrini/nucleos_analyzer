@@ -246,6 +246,74 @@ def simulate_benchmark(contributions: pd.DataFrame,
     return pd.DataFrame(results)
 
 
+def apply_overhead_to_benchmark(benchmark_data: pd.DataFrame, annual_overhead_pct: float) -> pd.DataFrame:
+    """
+    Apply an annual overhead percentage to benchmark data.
+
+    For example, if the benchmark is INPC and overhead is 4%,
+    this simulates investing in "INPC + 4% a.a."
+
+    Args:
+        benchmark_data: DataFrame with 'date' and 'value' columns
+        annual_overhead_pct: Annual overhead in percentage (e.g., 4 for 4%)
+
+    Returns:
+        DataFrame with adjusted values
+    """
+    if annual_overhead_pct == 0:
+        return benchmark_data.copy()
+
+    df = benchmark_data.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date').reset_index(drop=True)
+
+    # Calculate days between each point and first date
+    first_date = df['date'].iloc[0]
+    df['days'] = (df['date'] - first_date).dt.days
+
+    # Apply compound overhead: value * (1 + overhead)^(days/365)
+    annual_factor = 1 + (annual_overhead_pct / 100)
+    df['value'] = df['value'] * (annual_factor ** (df['days'] / 365))
+
+    return df[['date', 'value']]
+
+
+BENCHMARK_FETCHERS = {
+    'CDI': fetch_cdi,
+    'IPCA': fetch_ipca,
+    'INPC': fetch_inpc,
+    'S&P 500': fetch_sp500tr,
+    'USD': fetch_usd,
+}
+
+AVAILABLE_BENCHMARKS = list(BENCHMARK_FETCHERS.keys())
+
+
+def fetch_single_benchmark(name: str, start_date: str, end_date: str = None) -> pd.DataFrame | None:
+    """
+    Fetch a single benchmark by name.
+
+    Args:
+        name: Benchmark name (CDI, IPCA, INPC, S&P 500, USD)
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD)
+
+    Returns:
+        DataFrame with 'date' and 'value' columns, or None if fetch fails
+    """
+    if name not in BENCHMARK_FETCHERS:
+        return None
+
+    # Fetch with some buffer before start_date for lookback
+    buffer_start = (pd.to_datetime(start_date) - timedelta(days=30)).strftime('%Y-%m-%d')
+
+    try:
+        return BENCHMARK_FETCHERS[name](buffer_start, end_date)
+    except Exception as e:
+        print(f"Warning: Could not fetch {name}: {e}")
+        return None
+
+
 def fetch_all_benchmarks(start_date: str, end_date: str = None) -> dict[str, pd.DataFrame]:
     """
     Fetch all benchmark data.
@@ -257,40 +325,13 @@ def fetch_all_benchmarks(start_date: str, end_date: str = None) -> dict[str, pd.
     Returns:
         Dictionary mapping benchmark names to DataFrames
     """
-    # Fetch with some buffer before start_date for lookback
-    buffer_start = (pd.to_datetime(start_date) - timedelta(days=30)).strftime('%Y-%m-%d')
-
     benchmarks = {}
 
-    print("Fetching CDI...")
-    try:
-        benchmarks['CDI'] = fetch_cdi(buffer_start, end_date)
-    except Exception as e:
-        print(f"  Warning: Could not fetch CDI: {e}")
-
-    print("Fetching IPCA...")
-    try:
-        benchmarks['IPCA'] = fetch_ipca(buffer_start, end_date)
-    except Exception as e:
-        print(f"  Warning: Could not fetch IPCA: {e}")
-
-    print("Fetching INPC...")
-    try:
-        benchmarks['INPC'] = fetch_inpc(buffer_start, end_date)
-    except Exception as e:
-        print(f"  Warning: Could not fetch INPC: {e}")
-
-    print("Fetching S&P 500 TR...")
-    try:
-        benchmarks['S&P 500'] = fetch_sp500tr(buffer_start, end_date)
-    except Exception as e:
-        print(f"  Warning: Could not fetch S&P 500 TR: {e}")
-
-    print("Fetching USD/BRL...")
-    try:
-        benchmarks['USD'] = fetch_usd(buffer_start, end_date)
-    except Exception as e:
-        print(f"  Warning: Could not fetch USD/BRL: {e}")
+    for name in AVAILABLE_BENCHMARKS:
+        print(f"Fetching {name}...")
+        data = fetch_single_benchmark(name, start_date, end_date)
+        if data is not None:
+            benchmarks[name] = data
 
     return benchmarks
 
