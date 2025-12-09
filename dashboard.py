@@ -61,6 +61,49 @@ HELP_TEXTS = {
 }
 
 
+def filter_data_by_range(df_pos: pd.DataFrame, df_contrib: pd.DataFrame,
+                          start_date: str, end_date: str) -> tuple:
+    """
+    Filter position and contribution data to the selected date range.
+    Adjusts position values to be relative to the position before the start date.
+
+    Returns:
+        tuple: (df_pos_filtered, df_contrib_filtered, position_before_start)
+    """
+    df_pos = df_pos.copy()
+    df_contrib = df_contrib.copy()
+
+    # Convert dates
+    start_dt = pd.to_datetime(start_date) if start_date else None
+    end_dt = pd.to_datetime(end_date) if end_date else None
+
+    # Filter by date range
+    if start_dt and end_dt:
+        df_pos_filtered = df_pos[(df_pos['data'] >= start_dt) & (df_pos['data'] <= end_dt)].copy()
+        # Filter contributions by month to include all contributions in start month
+        df_contrib_filtered = df_contrib[
+            (df_contrib['data'].dt.to_period('M') >= start_dt.to_period('M')) &
+            (df_contrib['data'].dt.to_period('M') <= end_dt.to_period('M'))
+        ].copy()
+    else:
+        df_pos_filtered = df_pos.copy()
+        df_contrib_filtered = df_contrib.copy()
+
+    # Find position BEFORE the start date
+    if not df_pos_filtered.empty:
+        selected_start = df_pos_filtered['data'].iloc[0]
+        positions_before = df_pos[df_pos['data'] < selected_start]['posicao']
+        position_before_start = positions_before.iloc[-1] if len(positions_before) > 0 else 0
+    else:
+        position_before_start = 0
+
+    # Adjust position values to be relative to start
+    if not df_pos_filtered.empty:
+        df_pos_filtered['posicao'] = df_pos_filtered['posicao'] - position_before_start
+
+    return df_pos_filtered, df_contrib_filtered, position_before_start
+
+
 def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
     """Create a help icon with hover tooltip using CSS."""
     return html.Div([
@@ -113,46 +156,37 @@ def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
 
 
 def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
-                           date_range: tuple = None,
                            benchmark_sim: pd.DataFrame = None,
                            benchmark_label: str = None) -> go.Figure:
-    """Create the position line chart with optional benchmark comparison."""
-    df = df_position.copy()
+    """Create the position line chart with optional benchmark comparison.
 
-    if date_range and date_range[0] and date_range[1]:
-        df = df[(df['data'] >= date_range[0]) & (df['data'] <= date_range[1])]
-
+    Args:
+        df_position: Pre-filtered position data with adjusted values
+        benchmark_sim: Pre-filtered benchmark simulation data
+    """
     fig = go.Figure()
 
     # Main position line
-    fig.add_trace(go.Scatter(
-        x=df['data'],
-        y=df['posicao'],
-        mode='lines+markers',
-        name='Nucleos',
-        line=dict(color=COLORS['primary'], width=3),
-        marker=dict(size=8, color=COLORS['primary']),
-        hovertemplate='<b>%{x|%b %Y}</b><br>Nucleos: R$ %{y:,.2f}<extra></extra>'
-    ))
+    if not df_position.empty:
+        fig.add_trace(go.Scatter(
+            x=df_position['data'],
+            y=df_position['posicao'],
+            mode='lines+markers',
+            name='Nucleos',
+            line=dict(color=COLORS['primary'], width=3),
+            marker=dict(size=8, color=COLORS['primary']),
+            hovertemplate='<b>%{x|%b %Y}</b><br>Nucleos: R$ %{y:,.2f}<extra></extra>'
+        ))
 
     # Add benchmark curve if available
     if benchmark_sim is not None and not benchmark_sim.empty and benchmark_label:
-        bench_df = benchmark_sim.copy()
-        bench_df['data'] = pd.to_datetime(bench_df['data'])
-
-        if date_range and date_range[0] and date_range[1]:
-            bench_df = bench_df[
-                (bench_df['data'] >= date_range[0]) &
-                (bench_df['data'] <= date_range[1])
-            ]
-
         # Get base benchmark name for color
         base_name = benchmark_label.split('+')[0].strip()
         color = BENCHMARK_COLORS.get(base_name, '#888888')
 
         fig.add_trace(go.Scatter(
-            x=bench_df['data'],
-            y=bench_df['posicao'],
+            x=benchmark_sim['data'],
+            y=benchmark_sim['posicao'],
             mode='lines+markers',
             name=benchmark_label,
             line=dict(color=color, width=2, dash='dash'),
@@ -198,27 +232,27 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
 
 def create_contributions_figure(df_contributions: pd.DataFrame,
                                  df_position: pd.DataFrame = None,
-                                 show_split: bool = False,
-                                 date_range: tuple = None) -> go.Figure:
-    """Create the contributions bar chart with position and invested curves."""
+                                 show_split: bool = False) -> go.Figure:
+    """Create the contributions bar chart with position and invested curves.
+
+    Args:
+        df_contributions: Pre-filtered monthly contribution data
+        df_position: Pre-filtered and adjusted position data
+    """
     fig = go.Figure()
 
-    df = df_contributions.copy()
-    if date_range and date_range[0] and date_range[1]:
-        df = df[(df['data'] >= date_range[0]) & (df['data'] <= date_range[1])]
-
-    if show_split and 'contrib_participante' in df.columns:
+    if show_split and 'contrib_participante' in df_contributions.columns:
         # Stacked bar chart
         fig.add_trace(go.Bar(
-            x=df['data'],
-            y=df['contrib_participante'],
+            x=df_contributions['data'],
+            y=df_contributions['contrib_participante'],
             name='Participante',
             marker_color=COLORS['participant'],
             hovertemplate='<b>%{x|%b %Y}</b><br>Participante: R$ %{y:,.2f}<extra></extra>'
         ))
         fig.add_trace(go.Bar(
-            x=df['data'],
-            y=df['contrib_patrocinador'],
+            x=df_contributions['data'],
+            y=df_contributions['contrib_patrocinador'],
             name='Patrocinador',
             marker_color=COLORS['sponsor'],
             hovertemplate='<b>%{x|%b %Y}</b><br>Patrocinador: R$ %{y:,.2f}<extra></extra>'
@@ -227,19 +261,17 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
     else:
         # Combined bar chart
         fig.add_trace(go.Bar(
-            x=df['data'],
-            y=df['contribuicao_total'],
+            x=df_contributions['data'],
+            y=df_contributions['contribuicao_total'],
             name='Contribuição Mensal',
             marker_color=COLORS['participant'],
             hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição: R$ %{y:,.2f}<extra></extra>'
         ))
 
     # Add cumulative invested line
-    # IMPORTANT: ALWAYS shows total contributions (participant + company), regardless of toggle
-    # The toggle only affects the bars and the CAGR calculation on page 1
-    invested_cumsum = df['contribuicao_total'].cumsum()
+    invested_cumsum = df_contributions['contribuicao_total'].cumsum()
     fig.add_trace(go.Scatter(
-        x=df['data'],
+        x=df_contributions['data'],
         y=invested_cumsum,
         mode='lines+markers',
         name='Total Investido',
@@ -249,23 +281,18 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         hovertemplate='<b>%{x|%b %Y}</b><br>Total Investido: R$ %{y:,.2f}<extra></extra>'
     ))
 
-    # Add position curve if available
-    if df_position is not None:
-        df_pos = df_position.copy()
-        if date_range and date_range[0] and date_range[1]:
-            df_pos = df_pos[(df_pos['data'] >= date_range[0]) & (df_pos['data'] <= date_range[1])]
-
-        if not df_pos.empty:
-            fig.add_trace(go.Scatter(
-                x=df_pos['data'],
-                y=df_pos['posicao'],
-                mode='lines+markers',
-                name='Posição',
-                line=dict(color=COLORS['primary'], width=3),
-                marker=dict(size=6),
-                yaxis='y2',
-                hovertemplate='<b>%{x|%b %Y}</b><br>Posição: R$ %{y:,.2f}<extra></extra>'
-            ))
+    # Add position curve (already adjusted relative to start of range)
+    if df_position is not None and not df_position.empty:
+        fig.add_trace(go.Scatter(
+            x=df_position['data'],
+            y=df_position['posicao'],
+            mode='lines+markers',
+            name='Variação Posição',
+            line=dict(color=COLORS['primary'], width=3),
+            marker=dict(size=6),
+            yaxis='y2',
+            hovertemplate='<b>%{x|%b %Y}</b><br>Variação: R$ %{y:,.2f}<extra></extra>'
+        ))
 
     fig.update_layout(
         title=dict(
@@ -643,31 +670,19 @@ def create_app(df_position: pd.DataFrame,
         df_pos = pd.DataFrame(position_data)
         df_pos['data'] = pd.to_datetime(df_pos['data'])
 
-        # Filter by date range
-        df_contrib_filtered = df_contrib.copy()
-        df_pos_filtered = df_pos.copy()
-        start_dt = None
-        end_dt = None
-        if start_date and end_date:
-            start_dt = pd.to_datetime(start_date)
-            end_dt = pd.to_datetime(end_date)
-            # Filter contributions by MONTH (not exact date) to match monthly aggregation on page 2
-            # This ensures selecting "Feb/23" includes ALL February contributions, not just Feb 28+
-            df_contrib_filtered = df_contrib[
-                (df_contrib['data'].dt.to_period('M') >= start_dt.to_period('M')) &
-                (df_contrib['data'].dt.to_period('M') <= end_dt.to_period('M'))
-            ]
-            df_pos_filtered = df_pos[(df_pos['data'] >= start_dt) & (df_pos['data'] <= end_dt)]
+        # Filter data using helper function
+        df_pos_filtered, df_contrib_filtered, position_before_start = filter_data_by_range(
+            df_pos, df_contrib, start_date, end_date
+        )
 
         if df_pos_filtered.empty:
             return ('R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
                     'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
 
         # Toggle ON = company as mine = only participant contributions count as invested
-        # Toggle OFF = all contributions count as invested
         treat_company_as_mine = 'as_mine' in (company_as_mine or [])
 
-        # Calculate total invested within date range (for display)
+        # Calculate total invested within date range
         if treat_company_as_mine:
             if 'contrib_participante' in df_contrib_filtered.columns:
                 total_invested_in_range = df_contrib_filtered['contrib_participante'].sum() if not df_contrib_filtered.empty else 0
@@ -676,16 +691,13 @@ def create_app(df_position: pd.DataFrame,
         else:
             total_invested_in_range = df_contrib_filtered['contribuicao_total'].sum() if not df_contrib_filtered.empty else 0
 
-        # Position at start and end of selected range
-        start_position = df_pos_filtered['posicao'].iloc[0]
-        end_position = df_pos_filtered['posicao'].iloc[-1]
+        # Position change (already adjusted in filtered data)
+        position_change = df_pos_filtered['posicao'].iloc[-1]
 
-        # Total return = what you gained beyond what you invested
-        # Simple formula: Position - Invested = Return
-        total_return = end_position - total_invested_in_range
+        # Total return = position change minus what was invested in this period
+        total_return = position_change - total_invested_in_range
 
         # Calculate XIRR for the selected period
-        # Treat starting position as initial investment, add contributions, end with final position
         from calculator import xirr_bizdays
 
         if treat_company_as_mine:
@@ -697,13 +709,15 @@ def create_app(df_position: pd.DataFrame,
             amounts_for_xirr = df_contrib_filtered['contribuicao_total'].tolist() if not df_contrib_filtered.empty else []
 
         # Build cash flows: start position (outflow) + contributions (outflows) + end position (inflow)
+        # Note: Use original end_position (add back position_before_start since df is adjusted)
+        end_position_original = df_pos_filtered['posicao'].iloc[-1] + position_before_start
         dates = [df_pos_filtered['data'].iloc[0]] + (df_contrib_filtered['data'].tolist() if not df_contrib_filtered.empty else []) + [df_pos_filtered['data'].iloc[-1]]
-        amounts = [-start_position] + [-amt for amt in amounts_for_xirr] + [end_position]
+        amounts = [-position_before_start] + [-amt for amt in amounts_for_xirr] + [end_position_original]
 
         cagr = xirr_bizdays(dates, amounts)
         cagr_pct = cagr * 100 if cagr is not None else None
 
-        position_text = f'R$ {end_position:,.2f}'
+        position_text = f'R$ {position_change:,.2f}'
         invested_text = f'R$ {total_invested_in_range:,.2f}'
         cagr_text = f'{cagr_pct:+.2f}% a.a.' if cagr_pct is not None else 'N/A'
         return_text = f'R$ {total_return:,.2f} total'
@@ -744,14 +758,10 @@ def create_app(df_position: pd.DataFrame,
         df_contrib = pd.DataFrame(contributions_data)
         df_contrib['data'] = pd.to_datetime(df_contrib['data'])
 
-        # Filter by date range for calculations
-        df_filtered = df.copy()
-        df_contrib_filtered = df_contrib.copy()
-        if start_date and end_date:
-            start_dt = pd.to_datetime(start_date)
-            end_dt = pd.to_datetime(end_date)
-            df_filtered = df[(df['data'] >= start_dt) & (df['data'] <= end_dt)]
-            df_contrib_filtered = df_contrib[(df_contrib['data'] >= start_dt) & (df_contrib['data'] <= end_dt)]
+        # Filter data using helper function
+        df_pos_filtered, df_contrib_filtered, position_before_start = filter_data_by_range(
+            df, df_contrib, start_date, end_date
+        )
 
         benchmark_sim = None
         benchmark_label = None
@@ -759,7 +769,7 @@ def create_app(df_position: pd.DataFrame,
         benchmark_cagr_style = {'color': COLORS['text_muted'], 'margin': '0.5rem 0'}
         benchmark_label_text = 'Selecione um benchmark'
 
-        if benchmark_name and benchmark_name != 'none' and not df_contrib_filtered.empty and not df_filtered.empty:
+        if benchmark_name and benchmark_name != 'none' and not df_contrib_filtered.empty and not df_pos_filtered.empty:
             # Check cache first
             cache_key = benchmark_name
             if cache_key in cache:
@@ -784,30 +794,34 @@ def create_app(df_position: pd.DataFrame,
                 else:
                     benchmark_label = benchmark_name
 
-                # Benchmark ALWAYS uses total contributions (participant + patrocinador)
-                # The toggle only affects Nucleos CAGR calculation, not benchmark
-                # Use filtered contributions for the date range
+                # Simulate benchmark using filtered contributions and position dates
                 contrib_amounts = df_contrib_filtered['contribuicao_total']
-
-                # Create a temporary df for simulation
                 df_contrib_sim = df_contrib_filtered[['data']].copy()
                 df_contrib_sim['contribuicao_total'] = contrib_amounts
 
-                # Simulate benchmark using filtered position dates
                 benchmark_sim = simulate_benchmark(
                     df_contrib_sim,
                     benchmark_with_overhead,
-                    df_filtered[['data']]
+                    df_pos_filtered[['data']]
                 )
 
-                # Calculate benchmark CAGR (always using total contributions)
+                # Adjust benchmark to be relative to start (same as position data)
+                if not benchmark_sim.empty:
+                    bench_start = benchmark_sim['posicao'].iloc[0]
+                    benchmark_sim = benchmark_sim.copy()
+                    benchmark_sim['posicao'] = benchmark_sim['posicao'] - bench_start
+
+                # Calculate benchmark CAGR
                 if not benchmark_sim.empty and len(benchmark_sim) > 1:
-                    final_value = benchmark_sim['posicao'].iloc[-1]
+                    # benchmark_sim is now relative, so final value is the change
+                    final_value_change = benchmark_sim['posicao'].iloc[-1]
 
                     from calculator import xirr_bizdays
-                    last_date = df_filtered['data'].iloc[-1]
+                    last_date = df_pos_filtered['data'].iloc[-1]
+                    # For XIRR, use original values (contributions and final benchmark value)
+                    final_value_original = final_value_change + bench_start
                     dates = df_contrib_filtered['data'].tolist() + [last_date]
-                    amounts = [-amt for amt in contrib_amounts.tolist()] + [final_value]
+                    amounts = [-amt for amt in contrib_amounts.tolist()] + [final_value_original]
                     bench_cagr = xirr_bizdays(dates, amounts)
 
                     if bench_cagr is not None:
@@ -818,12 +832,11 @@ def create_app(df_position: pd.DataFrame,
                     else:
                         benchmark_cagr_text = 'N/A'
 
-                    benchmark_label_text = f'{benchmark_label}: R$ {final_value:,.2f}'
+                    benchmark_label_text = f'{benchmark_label}: R$ {final_value_change:,.2f}'
 
         fig = create_position_figure(
-            df,
+            df_pos_filtered,
             log_scale=(scale == 'log'),
-            date_range=(start_date, end_date),
             benchmark_sim=benchmark_sim,
             benchmark_label=benchmark_label
         )
@@ -839,16 +852,23 @@ def create_app(df_position: pd.DataFrame,
         State('position-data', 'data')
     )
     def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data, position_data):
-        df = pd.DataFrame(monthly_data)
-        df['data'] = pd.to_datetime(df['data'])
+        df_monthly = pd.DataFrame(monthly_data)
+        df_monthly['data'] = pd.to_datetime(df_monthly['data'])
 
         df_pos = pd.DataFrame(position_data)
         df_pos['data'] = pd.to_datetime(df_pos['data'])
+
+        # Filter data using helper function
+        df_pos_filtered, df_monthly_filtered, _ = filter_data_by_range(
+            df_pos, df_monthly, start_date, end_date
+        )
 
         # Show split when toggle is ON (company as mine = show what's yours vs theirs)
         treat_company_as_mine = 'as_mine' in (company_as_mine or [])
         show_split = treat_company_as_mine
 
-        return create_contributions_figure(df, df_position=df_pos, show_split=show_split, date_range=(start_date, end_date))
+        return create_contributions_figure(
+            df_monthly_filtered, df_position=df_pos_filtered, show_split=show_split
+        )
 
     return app
