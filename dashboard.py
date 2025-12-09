@@ -197,9 +197,10 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
 
 
 def create_contributions_figure(df_contributions: pd.DataFrame,
+                                 df_position: pd.DataFrame = None,
                                  show_split: bool = False,
                                  date_range: tuple = None) -> go.Figure:
-    """Create the contributions bar chart (stacked or combined)."""
+    """Create the contributions bar chart with position and invested curves."""
     fig = go.Figure()
 
     df = df_contributions.copy()
@@ -233,18 +234,36 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição: R$ %{y:,.2f}<extra></extra>'
         ))
 
-    # Add cumulative line (recalculate for filtered data)
-    df_cumsum = df['contribuicao_total'].cumsum() if date_range else df['contribuicao_acumulada']
+    # Add cumulative invested line (always total, regardless of toggle)
+    invested_cumsum = df['contribuicao_total'].cumsum()
     fig.add_trace(go.Scatter(
         x=df['data'],
-        y=df_cumsum if not date_range else df['contribuicao_total'].cumsum(),
+        y=invested_cumsum,
         mode='lines+markers',
-        name='Total Acumulado',
+        name='Total Investido',
         line=dict(color=COLORS['accent'], width=3),
         marker=dict(size=6),
         yaxis='y2',
-        hovertemplate='<b>%{x|%b %Y}</b><br>Acumulado: R$ %{y:,.2f}<extra></extra>'
+        hovertemplate='<b>%{x|%b %Y}</b><br>Total Investido: R$ %{y:,.2f}<extra></extra>'
     ))
+
+    # Add position curve if available
+    if df_position is not None:
+        df_pos = df_position.copy()
+        if date_range and date_range[0] and date_range[1]:
+            df_pos = df_pos[(df_pos['data'] >= date_range[0]) & (df_pos['data'] <= date_range[1])]
+
+        if not df_pos.empty:
+            fig.add_trace(go.Scatter(
+                x=df_pos['data'],
+                y=df_pos['posicao'],
+                mode='lines+markers',
+                name='Posição',
+                line=dict(color=COLORS['primary'], width=3),
+                marker=dict(size=6),
+                yaxis='y2',
+                hovertemplate='<b>%{x|%b %Y}</b><br>Posição: R$ %{y:,.2f}<extra></extra>'
+            ))
 
     fig.update_layout(
         title=dict(
@@ -265,10 +284,10 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             tickformat=',.0f'
         ),
         yaxis2=dict(
-            title=dict(text='Total Acumulado (R$)', font=dict(color=COLORS['accent'])),
+            title=dict(text='Valor (R$)', font=dict(color=COLORS['text'])),
             overlaying='y',
             side='right',
-            tickfont=dict(color=COLORS['accent']),
+            tickfont=dict(color=COLORS['text_muted']),
             tickformat=',.0f',
             showgrid=False
         ),
@@ -369,7 +388,7 @@ def create_app(df_position: pd.DataFrame,
         html.Div([
             html.Div([
                 html.P('Posição Atual', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
-                html.H2(f'R$ {stats["last_position"]:,.2f}', style={'color': COLORS['primary'], 'margin': '0.5rem 0'})
+                html.H2(id='current-position-value', style={'color': COLORS['primary'], 'margin': '0.5rem 0'})
             ], style={
                 'backgroundColor': COLORS['card'],
                 'padding': '1.5rem',
@@ -603,49 +622,81 @@ def create_app(df_position: pd.DataFrame,
         return position_style, contributions_style
 
     @callback(
+        Output('current-position-value', 'children'),
         Output('total-invested-value', 'children'),
         Output('nucleos-cagr-value', 'children'),
         Output('nucleos-cagr-value', 'style'),
         Output('nucleos-return-value', 'children'),
         Output('nucleos-return-value', 'style'),
         Input('company-as-mine-toggle', 'value'),
+        Input('start-month', 'value'),
+        Input('end-month', 'value'),
         State('contributions-data', 'data'),
         State('position-data', 'data'),
     )
-    def update_nucleos_stats(company_as_mine, contributions_data, position_data):
+    def update_nucleos_stats(company_as_mine, start_date, end_date, contributions_data, position_data):
         df_contrib = pd.DataFrame(contributions_data)
         df_contrib['data'] = pd.to_datetime(df_contrib['data'])
         df_pos = pd.DataFrame(position_data)
         df_pos['data'] = pd.to_datetime(df_pos['data'])
 
+        # Filter by date range
+        df_contrib_filtered = df_contrib.copy()
+        df_pos_filtered = df_pos.copy()
+        start_dt = None
+        end_dt = None
+        if start_date and end_date:
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
+            df_contrib_filtered = df_contrib[(df_contrib['data'] >= start_dt) & (df_contrib['data'] <= end_dt)]
+            df_pos_filtered = df_pos[(df_pos['data'] >= start_dt) & (df_pos['data'] <= end_dt)]
+
+        if df_pos_filtered.empty:
+            return ('R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
+                    'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
+
         # Toggle ON = company as mine = only participant contributions count as invested
         # Toggle OFF = all contributions count as invested
         treat_company_as_mine = 'as_mine' in (company_as_mine or [])
 
+        # Calculate total invested within date range (for display)
         if treat_company_as_mine:
-            # Company contributions are "free money" - only MY contributions count
-            if 'contrib_participante' in df_contrib.columns:
-                total_invested = df_contrib['contrib_participante'].sum()
-                amounts_for_xirr = df_contrib['contrib_participante'].tolist()
+            if 'contrib_participante' in df_contrib_filtered.columns:
+                total_invested_in_range = df_contrib_filtered['contrib_participante'].sum() if not df_contrib_filtered.empty else 0
             else:
-                total_invested = df_contrib['contribuicao_total'].sum()
-                amounts_for_xirr = df_contrib['contribuicao_total'].tolist()
+                total_invested_in_range = df_contrib_filtered['contribuicao_total'].sum() if not df_contrib_filtered.empty else 0
         else:
-            # All contributions count as invested
-            total_invested = df_contrib['contribuicao_total'].sum()
-            amounts_for_xirr = df_contrib['contribuicao_total'].tolist()
+            total_invested_in_range = df_contrib_filtered['contribuicao_total'].sum() if not df_contrib_filtered.empty else 0
 
-        last_position = df_pos['posicao'].iloc[-1]
-        total_return = last_position - total_invested
+        # Position at start and end of selected range
+        start_position = df_pos_filtered['posicao'].iloc[0]
+        end_position = df_pos_filtered['posicao'].iloc[-1]
 
-        # Calculate XIRR
+        # Total return = end position - start position - contributions in period
+        # (what you gained beyond what you put in during this period)
+        total_return = end_position - start_position - total_invested_in_range
+
+        # Calculate XIRR for the selected period
+        # Treat starting position as initial investment, add contributions, end with final position
         from calculator import xirr_bizdays
-        dates = df_contrib['data'].tolist() + [df_pos['data'].iloc[-1]]
-        amounts = [-amt for amt in amounts_for_xirr] + [last_position]
+
+        if treat_company_as_mine:
+            if 'contrib_participante' in df_contrib_filtered.columns:
+                amounts_for_xirr = df_contrib_filtered['contrib_participante'].tolist() if not df_contrib_filtered.empty else []
+            else:
+                amounts_for_xirr = df_contrib_filtered['contribuicao_total'].tolist() if not df_contrib_filtered.empty else []
+        else:
+            amounts_for_xirr = df_contrib_filtered['contribuicao_total'].tolist() if not df_contrib_filtered.empty else []
+
+        # Build cash flows: start position (outflow) + contributions (outflows) + end position (inflow)
+        dates = [df_pos_filtered['data'].iloc[0]] + (df_contrib_filtered['data'].tolist() if not df_contrib_filtered.empty else []) + [df_pos_filtered['data'].iloc[-1]]
+        amounts = [-start_position] + [-amt for amt in amounts_for_xirr] + [end_position]
+
         cagr = xirr_bizdays(dates, amounts)
         cagr_pct = cagr * 100 if cagr is not None else None
 
-        invested_text = f'R$ {total_invested:,.2f}'
+        position_text = f'R$ {end_position:,.2f}'
+        invested_text = f'R$ {(start_position + total_invested_in_range):,.2f}'
         cagr_text = f'{cagr_pct:+.2f}% a.a.' if cagr_pct is not None else 'N/A'
         return_text = f'R$ {total_return:,.2f} total'
 
@@ -653,6 +704,7 @@ def create_app(df_position: pd.DataFrame,
         return_color = COLORS['accent'] if total_return >= 0 else '#ef4444'
 
         return (
+            position_text,
             invested_text,
             cagr_text,
             {'color': cagr_color, 'margin': '0.5rem 0'},
@@ -684,13 +736,22 @@ def create_app(df_position: pd.DataFrame,
         df_contrib = pd.DataFrame(contributions_data)
         df_contrib['data'] = pd.to_datetime(df_contrib['data'])
 
+        # Filter by date range for calculations
+        df_filtered = df.copy()
+        df_contrib_filtered = df_contrib.copy()
+        if start_date and end_date:
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
+            df_filtered = df[(df['data'] >= start_dt) & (df['data'] <= end_dt)]
+            df_contrib_filtered = df_contrib[(df_contrib['data'] >= start_dt) & (df_contrib['data'] <= end_dt)]
+
         benchmark_sim = None
         benchmark_label = None
         benchmark_cagr_text = '--'
         benchmark_cagr_style = {'color': COLORS['text_muted'], 'margin': '0.5rem 0'}
         benchmark_label_text = 'Selecione um benchmark'
 
-        if benchmark_name and benchmark_name != 'none':
+        if benchmark_name and benchmark_name != 'none' and not df_contrib_filtered.empty and not df_filtered.empty:
             # Check cache first
             cache_key = benchmark_name
             if cache_key in cache:
@@ -717,17 +778,18 @@ def create_app(df_position: pd.DataFrame,
 
                 # Benchmark ALWAYS uses total contributions (participant + patrocinador)
                 # The toggle only affects Nucleos CAGR calculation, not benchmark
-                contrib_amounts = df_contrib['contribuicao_total']
+                # Use filtered contributions for the date range
+                contrib_amounts = df_contrib_filtered['contribuicao_total']
 
                 # Create a temporary df for simulation
-                df_contrib_sim = df_contrib[['data']].copy()
+                df_contrib_sim = df_contrib_filtered[['data']].copy()
                 df_contrib_sim['contribuicao_total'] = contrib_amounts
 
-                # Simulate benchmark
+                # Simulate benchmark using filtered position dates
                 benchmark_sim = simulate_benchmark(
                     df_contrib_sim,
                     benchmark_with_overhead,
-                    df[['data']]
+                    df_filtered[['data']]
                 )
 
                 # Calculate benchmark CAGR (always using total contributions)
@@ -735,8 +797,8 @@ def create_app(df_position: pd.DataFrame,
                     final_value = benchmark_sim['posicao'].iloc[-1]
 
                     from calculator import xirr_bizdays
-                    last_date = df['data'].iloc[-1]
-                    dates = df_contrib['data'].tolist() + [last_date]
+                    last_date = df_filtered['data'].iloc[-1]
+                    dates = df_contrib_filtered['data'].tolist() + [last_date]
                     amounts = [-amt for amt in contrib_amounts.tolist()] + [final_value]
                     bench_cagr = xirr_bizdays(dates, amounts)
 
@@ -765,16 +827,20 @@ def create_app(df_position: pd.DataFrame,
         Input('company-as-mine-toggle', 'value'),
         Input('start-month', 'value'),
         Input('end-month', 'value'),
-        State('contributions-monthly-data', 'data')
+        State('contributions-monthly-data', 'data'),
+        State('position-data', 'data')
     )
-    def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data):
+    def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data, position_data):
         df = pd.DataFrame(monthly_data)
         df['data'] = pd.to_datetime(df['data'])
+
+        df_pos = pd.DataFrame(position_data)
+        df_pos['data'] = pd.to_datetime(df_pos['data'])
 
         # Show split when toggle is ON (company as mine = show what's yours vs theirs)
         treat_company_as_mine = 'as_mine' in (company_as_mine or [])
         show_split = treat_company_as_mine
 
-        return create_contributions_figure(df, show_split=show_split, date_range=(start_date, end_date))
+        return create_contributions_figure(df, df_position=df_pos, show_split=show_split, date_range=(start_date, end_date))
 
     return app
