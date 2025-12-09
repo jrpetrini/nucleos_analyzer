@@ -234,7 +234,9 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição: R$ %{y:,.2f}<extra></extra>'
         ))
 
-    # Add cumulative invested line (always total, regardless of toggle)
+    # Add cumulative invested line
+    # IMPORTANT: ALWAYS shows total contributions (participant + company), regardless of toggle
+    # The toggle only affects the bars and the CAGR calculation on page 1
     invested_cumsum = df['contribuicao_total'].cumsum()
     fig.add_trace(go.Scatter(
         x=df['data'],
@@ -386,6 +388,7 @@ def create_app(df_position: pd.DataFrame,
 
         # Summary Cards
         html.Div([
+            # TODO: Fix "Posição Atual" - should match end of selected date range
             html.Div([
                 html.P('Posição Atual', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
                 html.H2(id='current-position-value', style={'color': COLORS['primary'], 'margin': '0.5rem 0'})
@@ -648,7 +651,12 @@ def create_app(df_position: pd.DataFrame,
         if start_date and end_date:
             start_dt = pd.to_datetime(start_date)
             end_dt = pd.to_datetime(end_date)
-            df_contrib_filtered = df_contrib[(df_contrib['data'] >= start_dt) & (df_contrib['data'] <= end_dt)]
+            # Filter contributions by MONTH (not exact date) to match monthly aggregation on page 2
+            # This ensures selecting "Feb/23" includes ALL February contributions, not just Feb 28+
+            df_contrib_filtered = df_contrib[
+                (df_contrib['data'].dt.to_period('M') >= start_dt.to_period('M')) &
+                (df_contrib['data'].dt.to_period('M') <= end_dt.to_period('M'))
+            ]
             df_pos_filtered = df_pos[(df_pos['data'] >= start_dt) & (df_pos['data'] <= end_dt)]
 
         if df_pos_filtered.empty:
@@ -672,9 +680,9 @@ def create_app(df_position: pd.DataFrame,
         start_position = df_pos_filtered['posicao'].iloc[0]
         end_position = df_pos_filtered['posicao'].iloc[-1]
 
-        # Total return = end position - start position - contributions in period
-        # (what you gained beyond what you put in during this period)
-        total_return = end_position - start_position - total_invested_in_range
+        # Total return = what you gained beyond what you invested
+        # Simple formula: Position - Invested = Return
+        total_return = end_position - total_invested_in_range
 
         # Calculate XIRR for the selected period
         # Treat starting position as initial investment, add contributions, end with final position
@@ -696,7 +704,7 @@ def create_app(df_position: pd.DataFrame,
         cagr_pct = cagr * 100 if cagr is not None else None
 
         position_text = f'R$ {end_position:,.2f}'
-        invested_text = f'R$ {(start_position + total_invested_in_range):,.2f}'
+        invested_text = f'R$ {total_invested_in_range:,.2f}'
         cagr_text = f'{cagr_pct:+.2f}% a.a.' if cagr_pct is not None else 'N/A'
         return_text = f'R$ {total_return:,.2f} total'
 
