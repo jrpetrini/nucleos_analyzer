@@ -61,6 +61,7 @@ HELP_TEXTS = {
     'cagr_nucleos': 'CAGR (Taxa de Crescimento Anual Composta) calculada usando XIRR com dias úteis brasileiros (252 dias/ano). Representa o retorno anualizado considerando todas as contribuições e suas datas exatas. O valor em R$ abaixo mostra o lucro total (posição menos investido).',
     'cagr_benchmark': 'Simula suas contribuições investidas no índice selecionado. O CAGR é calculado da mesma forma que o Nucleos. O valor em R$ abaixo mostra a posição total que você teria (não o lucro).',
     'company_as_mine': 'Quando ativado, considera as contribuições da empresa como "de graça" - você recebe o patrimônio total mas só contabiliza o que saiu do seu bolso. Isso mostra o retorno real sobre seu dinheiro. Afeta tanto o Nucleos quanto o benchmark.',
+    'pdf_upload': 'Faça upload do arquivo "extratoIndividual.pdf" do site da Nucleos. Acesse sua conta no portal Nucleos para baixar o extrato.',
 }
 
 
@@ -214,7 +215,8 @@ def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
                 'padding': '8px 12px',
                 'borderRadius': '6px',
                 'fontSize': '12px',
-                'maxWidth': '280px',
+                'minWidth': '280px',
+                'maxWidth': '40vw',
                 'boxShadow': '0 4px 6px rgba(0,0,0,0.3)',
                 'zIndex': '1000',
                 'top': '100%',
@@ -644,7 +646,8 @@ def create_app(df_position: pd.DataFrame = None,
                         'display': 'inline-block'
                     },
                     accept='.pdf'
-                )
+                ),
+                create_help_icon(HELP_TEXTS['pdf_upload'], 'help-pdf-upload'),
             ], style={'display': 'flex', 'alignItems': 'center'})
         ], style={
             'display': 'flex',
