@@ -83,7 +83,8 @@ def process_position_data(df_raw: pd.DataFrame) -> pd.DataFrame:
         .last()[['cotas_cumsum', 'posicao', 'valor_cota']]
         .rename(columns={'cotas_cumsum': 'cotas'})
     )
-    df.index = df.index.to_period('M').to_timestamp(how='end')
+    # Use end of month but normalize to midnight to avoid timezone/rounding issues
+    df.index = df.index.to_period('M').to_timestamp(how='end').normalize()
     df = df.reset_index().rename(columns={'mes_ano': 'data'})
 
     return df
@@ -104,7 +105,8 @@ def process_contributions_data(df_contributions: pd.DataFrame) -> pd.DataFrame:
 
     df = df_contributions.copy()
     # Aggregate by month for chart display
-    df['mes'] = df['data'].dt.to_period('M').dt.to_timestamp(how='end')
+    # Use end of month but normalize to midnight to avoid timezone/rounding issues
+    df['mes'] = df['data'].dt.to_period('M').dt.to_timestamp(how='end').dt.normalize()
 
     agg_dict = {'contribuicao_total': 'sum'}
     if 'contrib_participante' in df.columns:

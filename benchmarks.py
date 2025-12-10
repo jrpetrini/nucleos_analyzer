@@ -164,29 +164,114 @@ def fetch_usd(start_date: str, end_date: str = None) -> pd.DataFrame:
     return df
 
 
-def get_value_on_date(df: pd.DataFrame, target_date: pd.Timestamp) -> float | None:
+def get_value_on_date(df: pd.DataFrame, target_date: pd.Timestamp,
+                       extrapolate_annual_rate: float = None) -> tuple[float | None, pd.Timestamp | None]:
     """
-    Get the index value on or before a specific date.
+    Get the index value for a specific date, with interpolation and extrapolation.
 
-    Uses forward-fill logic: if exact date not found,
-    uses the most recent available value.
+    For dates between available data points: uses geometric interpolation
+    (assumes continuous compound growth between points).
+
+    For dates beyond available data: extrapolates using the provided annual rate,
+    or uses the average historical rate if not provided.
+
+    Returns:
+        tuple: (value, actual_date) where actual_date is the reference date used
     """
     target_date = pd.Timestamp(target_date).normalize()
     df = df.copy()
     df['date'] = pd.to_datetime(df['date']).dt.normalize()
+    df = df.sort_values('date').reset_index(drop=True)
 
-    # Filter to dates on or before target
-    available = df[df['date'] <= target_date]
+    if df.empty:
+        return None, None
 
-    if available.empty:
-        return None
+    # Check if target is before first data point
+    if target_date < df['date'].iloc[0]:
+        return None, None
 
-    return available.iloc[-1]['value']
+    # Check if target is after last data point - need to extrapolate
+    last_date = df['date'].iloc[-1]
+    if target_date > last_date:
+        last_value = df['value'].iloc[-1]
+
+        # Calculate extrapolation rate using Brazilian business days (252/year)
+        if extrapolate_annual_rate is not None:
+            annual_rate = extrapolate_annual_rate
+        elif len(df) > 1:
+            # Use historical average rate from the data
+            first_value = df['value'].iloc[0]
+            first_date = df['date'].iloc[0]
+            # Use business days for consistency with XIRR
+            try:
+                import bizdays
+                cal = bizdays.Calendar.load('ANBIMA')
+                bizdays_total = cal.bizdays(first_date, last_date)
+                years = bizdays_total / 252
+            except Exception:
+                # Fallback to calendar days if bizdays fails
+                years = (last_date - first_date).days / 365
+
+            if years > 0 and first_value > 0:
+                annual_rate = ((last_value / first_value) ** (1 / years) - 1) * 100
+            else:
+                annual_rate = 0
+        else:
+            annual_rate = 0
+
+        # Extrapolate using business days
+        try:
+            import bizdays
+            cal = bizdays.Calendar.load('ANBIMA')
+            bizdays_diff = cal.bizdays(last_date, target_date)
+            annual_factor = 1 + (annual_rate / 100)
+            value = last_value * (annual_factor ** (bizdays_diff / 252))
+        except Exception:
+            # Fallback to calendar days
+            days_diff = (target_date - last_date).days
+            annual_factor = 1 + (annual_rate / 100)
+            value = last_value * (annual_factor ** (days_diff / 365))
+
+        return value, last_date
+
+    # Find surrounding data points for interpolation
+    before = df[df['date'] <= target_date]
+    after = df[df['date'] > target_date]
+
+    if before.empty:
+        return None, None
+
+    prev_row = before.iloc[-1]
+    prev_date = prev_row['date']
+    prev_value = prev_row['value']
+
+    # Exact match
+    if prev_date == target_date:
+        return prev_value, prev_date
+
+    # Interpolate between prev and next using geometric mean
+    if not after.empty:
+        next_row = after.iloc[0]
+        next_date = next_row['date']
+        next_value = next_row['value']
+
+        total_days = (next_date - prev_date).days
+        days_from_prev = (target_date - prev_date).days
+
+        if total_days > 0 and prev_value > 0 and next_value > 0:
+            # Geometric interpolation: value = prev * (next/prev)^(fraction)
+            fraction = days_from_prev / total_days
+            value = prev_value * ((next_value / prev_value) ** fraction)
+            return value, target_date
+
+    # Fallback to previous value
+    return prev_value, prev_date
 
 
 def simulate_benchmark(contributions: pd.DataFrame,
                        benchmark_data: pd.DataFrame,
-                       position_dates: pd.DataFrame) -> pd.DataFrame:
+                       position_dates: pd.DataFrame,
+                       extrapolate_annual_rate: float = None) -> pd.DataFrame:
     """
     Simulate what contributions would be worth if invested in a benchmark.
 
@@ -197,6 +282,8 @@ def simulate_benchmark(contributions: pd.DataFrame,
         contributions: DataFrame with 'data' (date) and 'contribuicao_total' columns
         benchmark_data: DataFrame with 'date' and 'value' columns
         position_dates: DataFrame with 'data' column (dates to calculate value for)
+        extrapolate_annual_rate: Annual rate (%) to extrapolate if position date
+                                  is beyond available benchmark data
 
     Returns:
         DataFrame with 'data' and 'posicao' columns showing simulated wealth
@@ -221,8 +308,11 @@ def simulate_benchmark(contributions: pd.DataFrame,
             contrib_date = contrib_row['data']
 
             if contrib_date <= pos_date:
-                # Get benchmark value on contribution date
-                bench_value = get_value_on_date(benchmark_data, contrib_date)
+                # Get benchmark value on contribution date (with extrapolation if needed)
+                bench_value, _ = get_value_on_date(
+                    benchmark_data, contrib_date,
+                    extrapolate_annual_rate=extrapolate_annual_rate
+                )
                 if bench_value is not None and bench_value > 0:
                     # Buy units of the benchmark
                     units_bought = contrib_row['contribuicao_total'] / bench_value
@@ -231,8 +321,11 @@ def simulate_benchmark(contributions: pd.DataFrame,
             else:
                 break
 
-        # Value holdings at position date
-        current_value = get_value_on_date(benchmark_data, pos_date)
+        # Value holdings at position date (with extrapolation if needed)
+        current_value, _ = get_value_on_date(
+            benchmark_data, pos_date,
+            extrapolate_annual_rate=extrapolate_annual_rate
+        )
         if current_value is not None:
             position_value = units_held * current_value
         else:
