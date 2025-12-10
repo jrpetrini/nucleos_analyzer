@@ -3,8 +3,11 @@
 Dashboard UI components for Nucleos Analyzer.
 """
 
+import base64
+import io
 import pandas as pd
 import plotly.graph_objects as go
+import dash
 from dash import Dash, dcc, html, callback, Output, Input, State
 
 from calculator import calculate_summary_stats
@@ -411,14 +414,36 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
     return fig
 
 
-def create_app(df_position: pd.DataFrame,
-               df_contributions_raw: pd.DataFrame,
-               df_contributions_monthly: pd.DataFrame) -> Dash:
+def create_empty_figure(message: str = "Sem dados") -> go.Figure:
+    """Create an empty placeholder figure with a message."""
+    fig = go.Figure()
+    fig.add_annotation(
+        text=message,
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=20, color=COLORS['text_muted'])
+    )
+    fig.update_layout(
+        plot_bgcolor=COLORS['background'],
+        paper_bgcolor=COLORS['background'],
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+        margin=dict(l=40, r=40, t=40, b=40)
+    )
+    return fig
+
+
+def create_app(df_position: pd.DataFrame = None,
+               df_contributions_raw: pd.DataFrame = None,
+               df_contributions_monthly: pd.DataFrame = None) -> Dash:
     """
     Create the Dash application.
 
     Args:
-        df_position: Processed position data
+        df_position: Processed position data (optional - can start without data)
         df_contributions_raw: Raw contributions with exact dates (for XIRR)
         df_contributions_monthly: Monthly aggregated contributions (for charts)
 
@@ -427,30 +452,52 @@ def create_app(df_position: pd.DataFrame,
     """
     app = Dash(__name__, suppress_callback_exceptions=True)
 
-    min_date = df_position['data'].min()
-    max_date = df_position['data'].max()
+    # Check if we have data
+    has_data = df_position is not None and not df_position.empty
 
-    # Create month options for dropdowns
-    month_options = [
-        {'label': d.strftime('%b %Y'), 'value': d.isoformat()}
-        for d in df_position['data']
-    ]
+    if has_data:
+        min_date = df_position['data'].min()
+        max_date = df_position['data'].max()
 
-    # Benchmark options
+        # Create month options for dropdowns
+        month_options = [
+            {'label': d.strftime('%b %Y'), 'value': d.isoformat()}
+            for d in df_position['data']
+        ]
+
+        # Calculate summary stats
+        stats = calculate_summary_stats(df_position, df_contributions_raw, df_contributions_monthly)
+
+        # Pre-create figures
+        initial_position_fig = create_position_figure(df_position, log_scale=False)
+        contributions_fig = create_contributions_figure(df_contributions_monthly, show_split=False)
+
+        # Date range for benchmark fetching
+        start_date_str = df_contributions_raw['data'].min().strftime('%Y-%m-%d')
+        end_date_str = df_position['data'].max().strftime('%Y-%m-%d')
+
+        # Convert data to dict for stores
+        position_data = df_position.to_dict('records')
+        contributions_data = df_contributions_raw.to_dict('records')
+        contributions_monthly_data = df_contributions_monthly.to_dict('records')
+    else:
+        # Empty state defaults
+        min_date = None
+        max_date = None
+        month_options = []
+        stats = {}
+        initial_position_fig = create_empty_figure("Carregue um PDF para visualizar")
+        contributions_fig = create_empty_figure("Carregue um PDF para visualizar")
+        start_date_str = ''
+        end_date_str = ''
+        position_data = []
+        contributions_data = []
+        contributions_monthly_data = []
+
+    # Benchmark options (always available)
     benchmark_options = [{'label': 'Nenhum', 'value': 'none'}] + [
         {'label': name, 'value': name} for name in AVAILABLE_BENCHMARKS
     ]
-
-    # Calculate summary stats
-    stats = calculate_summary_stats(df_position, df_contributions_raw, df_contributions_monthly)
-
-    # Pre-create figures
-    initial_position_fig = create_position_figure(df_position, log_scale=False)
-    contributions_fig = create_contributions_figure(df_contributions_monthly, show_split=False)
-
-    # Date range for benchmark fetching
-    start_date_str = df_contributions_raw['data'].min().strftime('%Y-%m-%d')
-    end_date_str = df_position['data'].max().strftime('%Y-%m-%d')
 
     app.layout = html.Div([
         # Header
@@ -561,13 +608,13 @@ def create_app(df_position: pd.DataFrame,
         }),
 
         # Shared controls (persist between tabs)
-        html.Div([
+        html.Div(id='date-controls', children=[
             html.Div([
                 html.Label('De:', style={'color': COLORS['text'], 'marginRight': '0.5rem'}),
                 dcc.Dropdown(
                     id='start-month',
                     options=month_options,
-                    value=min_date.isoformat(),
+                    value=min_date.isoformat() if min_date else None,
                     clearable=False,
                     style={'width': '130px', 'color': '#000'}
                 ),
@@ -575,9 +622,28 @@ def create_app(df_position: pd.DataFrame,
                 dcc.Dropdown(
                     id='end-month',
                     options=month_options,
-                    value=max_date.isoformat(),
+                    value=max_date.isoformat() if max_date else None,
                     clearable=False,
                     style={'width': '130px', 'color': '#000'}
+                ),
+                # PDF Upload - amber when no data, primary when loaded
+                dcc.Upload(
+                    id='pdf-upload',
+                    children=html.Div([
+                        html.Span('📄 ', style={'marginRight': '0.5rem'}),
+                        'Carregar PDF'
+                    ]),
+                    style={
+                        'marginLeft': '2rem',
+                        'padding': '0.5rem 1rem',
+                        'backgroundColor': COLORS['primary'] if has_data else COLORS['sponsor'],
+                        'color': COLORS['text'],
+                        'border': 'none',
+                        'borderRadius': '0.5rem',
+                        'cursor': 'pointer',
+                        'display': 'inline-block'
+                    },
+                    accept='.pdf'
                 )
             ], style={'display': 'flex', 'alignItems': 'center'})
         ], style={
@@ -692,9 +758,10 @@ def create_app(df_position: pd.DataFrame,
         }),
 
         # Store data for callbacks
-        dcc.Store(id='position-data', data=df_position.to_dict('records')),
-        dcc.Store(id='contributions-data', data=df_contributions_raw.to_dict('records')),
-        dcc.Store(id='contributions-monthly-data', data=df_contributions_monthly.to_dict('records')),
+        dcc.Store(id='position-data', data=position_data),
+        dcc.Store(id='contributions-data', data=contributions_data),
+        dcc.Store(id='contributions-monthly-data', data=contributions_monthly_data),
+        dcc.Store(id='data-loaded', data=has_data),
         dcc.Store(id='date-range-data', data={'start': start_date_str, 'end': end_date_str}),
         dcc.Store(id='benchmark-cache', data={}),
         dcc.Store(id='stats-data', data=stats),
@@ -730,13 +797,13 @@ def create_app(df_position: pd.DataFrame,
         Output('end-month', 'options'),
         Output('end-month', 'value'),
         Input('start-month', 'value'),
-        State('month-options', 'data'),
+        Input('month-options', 'data'),
         State('end-month', 'value')
     )
     def update_end_month_options(start_month, all_options, current_end):
         """Filter end month options to only show months >= start month."""
         if not start_month or not all_options:
-            return all_options, current_end
+            return all_options or [], current_end
 
         start_dt = pd.to_datetime(start_month)
         filtered_options = [
@@ -744,8 +811,11 @@ def create_app(df_position: pd.DataFrame,
             if pd.to_datetime(opt['value']) >= start_dt
         ]
 
+        # If no current end (fresh upload), set to max date
+        if not current_end and filtered_options:
+            new_end = filtered_options[-1]['value']
         # If current end is before start, update to start
-        if current_end and pd.to_datetime(current_end) < start_dt:
+        elif current_end and pd.to_datetime(current_end) < start_dt:
             new_end = start_month
         else:
             new_end = current_end
@@ -766,6 +836,11 @@ def create_app(df_position: pd.DataFrame,
         State('position-data', 'data'),
     )
     def update_nucleos_stats(company_as_mine, start_date, end_date, contributions_data, position_data):
+        # Guard for empty data
+        if not contributions_data or not position_data:
+            return ('R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
+                    'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
+
         df_contrib = pd.DataFrame(contributions_data)
         df_contrib['data'] = pd.to_datetime(df_contrib['data'])
         df_pos = pd.DataFrame(position_data)
@@ -866,6 +941,12 @@ def create_app(df_position: pd.DataFrame,
     )
     def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
                               company_as_mine, position_data, contributions_data, date_range, cache):
+        # Guard for empty data
+        if not position_data or not contributions_data:
+            empty_fig = create_empty_figure("Carregue um PDF para visualizar")
+            return (empty_fig, '--', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
+                    'Selecione um benchmark', cache or {})
+
         df = pd.DataFrame(position_data)
         df['data'] = pd.to_datetime(df['data'])
 
@@ -982,6 +1063,10 @@ def create_app(df_position: pd.DataFrame,
         State('position-data', 'data')
     )
     def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data, position_data):
+        # Guard for empty data
+        if not monthly_data or not position_data:
+            return create_empty_figure("Carregue um PDF para visualizar")
+
         df_monthly = pd.DataFrame(monthly_data)
         df_monthly['data'] = pd.to_datetime(df_monthly['data'])
 
@@ -1000,5 +1085,91 @@ def create_app(df_position: pd.DataFrame,
         return create_contributions_figure(
             df_monthly_filtered, df_position=df_pos_filtered, show_split=show_split
         )
+
+    @callback(
+        Output('position-data', 'data'),
+        Output('contributions-data', 'data'),
+        Output('contributions-monthly-data', 'data'),
+        Output('date-range-data', 'data'),
+        Output('stats-data', 'data'),
+        Output('month-options', 'data'),
+        Output('start-month', 'options'),
+        Output('start-month', 'value'),
+        Output('data-loaded', 'data'),
+        Input('pdf-upload', 'contents'),
+        State('pdf-upload', 'filename'),
+        prevent_initial_call=True
+    )
+    def upload_pdf(contents, filename):
+        """Process uploaded PDF file."""
+        if contents is None:
+            raise dash.exceptions.PreventUpdate
+
+        from extractor import extract_data_from_pdf
+        from calculator import process_position_data, process_contributions_data
+
+        # Decode the uploaded file content
+        # Format: "data:application/pdf;base64,<base64-encoded-content>"
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+
+        # Create a BytesIO object for pypdf to read
+        pdf_file = io.BytesIO(decoded)
+
+        # Extract data from the PDF
+        df_raw, df_contributions_raw = extract_data_from_pdf(pdf_file)
+        df_position = process_position_data(df_raw)
+        df_contributions_monthly = process_contributions_data(df_contributions_raw)
+
+        # Create month options
+        month_options = [
+            {'label': d.strftime('%b %Y'), 'value': d.isoformat()}
+            for d in df_position['data']
+        ]
+
+        min_date = df_position['data'].min()
+
+        # Calculate stats
+        stats = calculate_summary_stats(df_position, df_contributions_raw, df_contributions_monthly)
+
+        # Date range for benchmark
+        start_date_str = df_contributions_raw['data'].min().strftime('%Y-%m-%d')
+        end_date_str = df_position['data'].max().strftime('%Y-%m-%d')
+
+        # Note: end-month options/value will be set by update_end_month_options callback
+        # which is triggered when start-month.value changes
+
+        return (
+            df_position.to_dict('records'),
+            df_contributions_raw.to_dict('records'),
+            df_contributions_monthly.to_dict('records'),
+            {'start': start_date_str, 'end': end_date_str},
+            stats,
+            month_options,
+            month_options,
+            min_date.isoformat(),
+            True,
+        )
+
+    @callback(
+        Output('pdf-upload', 'style'),
+        Input('data-loaded', 'data')
+    )
+    def update_upload_button_style(data_loaded):
+        """Update upload button color: amber when empty, primary when loaded."""
+        base_style = {
+            'marginLeft': '2rem',
+            'padding': '0.5rem 1rem',
+            'color': COLORS['text'],
+            'border': 'none',
+            'borderRadius': '0.5rem',
+            'cursor': 'pointer',
+            'display': 'inline-block'
+        }
+        if data_loaded:
+            base_style['backgroundColor'] = COLORS['primary']
+        else:
+            base_style['backgroundColor'] = COLORS['sponsor']  # Amber
+        return base_style
 
     return app
