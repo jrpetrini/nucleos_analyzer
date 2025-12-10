@@ -55,9 +55,9 @@ OVERHEAD_OPTIONS = [
 HELP_TEXTS = {
     'benchmark': 'Compare sua carteira com índices de mercado. O benchmark simula quanto você teria se tivesse investido as mesmas contribuições no índice selecionado.',
     'overhead': 'Adiciona um retorno extra anual ao benchmark. Ex: INPC +4% simula um investimento que rende INPC mais 4% ao ano.',
-    'cagr_nucleos': 'CAGR (Taxa de Crescimento Anual Composta) calculada usando XIRR com dias úteis brasileiros (252 dias/ano). Representa o retorno anualizado considerando todas as contribuições e suas datas exatas.',
-    'cagr_benchmark': 'CAGR do benchmark selecionado, calculada da mesma forma que o Nucleos para comparação justa.',
-    'company_as_mine': 'Quando ativado, considera as contribuições da empresa como "de graça" - você recebe o patrimônio total mas só contabiliza o que saiu do seu bolso. Isso mostra o retorno real sobre seu dinheiro.',
+    'cagr_nucleos': 'CAGR (Taxa de Crescimento Anual Composta) calculada usando XIRR com dias úteis brasileiros (252 dias/ano). Representa o retorno anualizado considerando todas as contribuições e suas datas exatas. O valor em R$ abaixo mostra o lucro total (posição menos investido).',
+    'cagr_benchmark': 'Simula suas contribuições investidas no índice selecionado. O CAGR é calculado da mesma forma que o Nucleos. O valor em R$ abaixo mostra a posição total que você teria (não o lucro).',
+    'company_as_mine': 'Quando ativado, considera as contribuições da empresa como "de graça" - você recebe o patrimônio total mas só contabiliza o que saiu do seu bolso. Isso mostra o retorno real sobre seu dinheiro. Afeta tanto o Nucleos quanto o benchmark.',
 }
 
 
@@ -858,13 +858,14 @@ def create_app(df_position: pd.DataFrame,
         Input('end-month', 'value'),
         Input('benchmark-select', 'value'),
         Input('overhead-select', 'value'),
+        Input('company-as-mine-toggle', 'value'),
         State('position-data', 'data'),
         State('contributions-data', 'data'),
         State('date-range-data', 'data'),
         State('benchmark-cache', 'data')
     )
     def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
-                              position_data, contributions_data, date_range, cache):
+                              company_as_mine, position_data, contributions_data, date_range, cache):
         df = pd.DataFrame(position_data)
         df['data'] = pd.to_datetime(df['data'])
 
@@ -908,7 +909,13 @@ def create_app(df_position: pd.DataFrame,
                     benchmark_label = benchmark_name
 
                 # Simulate benchmark using filtered contributions and position dates
-                contrib_amounts = df_contrib_filtered['contribuicao_total']
+                # Use same contribution type as Nucleos based on toggle
+                treat_company_as_mine = 'as_mine' in (company_as_mine or [])
+                if treat_company_as_mine and 'contrib_participante' in df_contrib_filtered.columns:
+                    contrib_amounts = df_contrib_filtered['contrib_participante']
+                else:
+                    contrib_amounts = df_contrib_filtered['contribuicao_total']
+
                 df_contrib_sim = df_contrib_filtered[['data']].copy()
                 df_contrib_sim['contribuicao_total'] = contrib_amounts
 
@@ -954,8 +961,8 @@ def create_app(df_position: pd.DataFrame,
                     else:
                         benchmark_cagr_text = 'N/A'
 
-                    # Display matches the chart's final value (absolute)
-                    benchmark_label_text = f'{benchmark_label}: R$ {benchmark_final_value:,.2f}'
+                    # Display shows position value (what contributions would be worth)
+                    benchmark_label_text = f'Posição {benchmark_label}: R$ {benchmark_final_value:,.2f}'
 
         fig = create_position_figure(
             df_pos_filtered,
