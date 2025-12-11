@@ -33,12 +33,12 @@ Basta fazer upload do seu PDF e pronto!
 
 ## Como Obter o PDF
 
-<!-- TODO: Adicionar instruções detalhadas de como baixar o extratoIndividual.pdf do portal Nucleos -->
-
-1. Acesse o portal da Nucleos
+1. Acesse [planocd.nucleos.com.br](https://planocd.nucleos.com.br/)
 2. Faça login com suas credenciais
-3. Navegue até a seção de extratos
-4. Baixe o arquivo "extratoIndividual.pdf"
+3. No menu, vá em **Arrecadação** → **Extrato de Saldo Individual**
+4. Selecione o período desejado (sugestão: da data de início do plano até o fim do ano seguinte, para pegar tudo)
+5. Clique em **Gerar PDF**
+6. Salve o arquivo "extratoIndividual.pdf"
 
 ## Executar Localmente
 
