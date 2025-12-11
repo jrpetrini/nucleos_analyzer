@@ -40,6 +40,65 @@ Basta fazer upload do seu PDF e pronto!
 5. Clique em **Gerar PDF**
 6. Salve o arquivo "extratoIndividual.pdf"
 
+## Privacidade e Segurança
+
+⚠️ **IMPORTANTE:** O extrato PDF da Nucleos contém informações pessoais (nome, CPF, endereço) no cabeçalho e rodapé.
+
+### Para Máxima Privacidade
+
+**Recomendamos executar localmente** (veja seção "Executar Localmente" abaixo) para manter seus dados completamente privados.
+
+### Se Usar a Versão Online
+
+O aplicativo **não armazena** seus dados pessoais - apenas extrai valores e datas das transações. No entanto, se você prefere não enviar o PDF original:
+
+#### Método 1: Redação Manual (Mais Simples)
+
+1. Abra o PDF em um leitor de PDF (Adobe Acrobat, Preview no Mac, etc.)
+2. Use a ferramenta de redação/marcação para cobrir informações pessoais:
+   - Nome completo
+   - CPF
+   - Endereço
+   - Qualquer outro dado identificável no cabeçalho/rodapé
+3. Salve como novo PDF
+4. Faça upload do PDF redacionado
+
+#### Método 2: Edição com Software PDF Gratuito
+
+Use ferramentas **offline** instaladas no seu computador:
+
+**Windows:**
+- [PDF-XChange Editor](https://www.pdf-xchange.com/product/pdf-xchange-editor) (gratuito)
+- Adobe Acrobat Reader (versão gratuita tem ferramentas básicas)
+
+**Mac:**
+- Preview (nativo) - use ferramentas de marcação/anotação
+- [PDFtk](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/)
+
+**Linux:**
+- [Okular](https://okular.kde.org/)
+- [PDF Arranger](https://github.com/pdfarranger/pdfarranger)
+
+Passos:
+1. Abra o PDF no software escolhido
+2. Use a ferramenta de retângulo/marcação preta para cobrir dados pessoais
+3. Salve como novo PDF
+4. **Teste:** Abra o PDF redacionado e verifique se consegue copiar o texto das transações (Ctrl+C). Se conseguir, o extrator funcionará.
+
+**⚠️ Importante:** Não use "Imprimir para PDF" - isso pode converter o texto em imagem e quebrar a extração de dados.
+
+### O Que o Aplicativo Extrai
+
+Para transparência, o aplicativo extrai **apenas**:
+- Valores das contribuições e saldos
+- Datas das transações
+- Classificação (participante vs. patrocinador)
+
+**NÃO extrai:**
+- Nomes, CPF, endereços
+- Metadados do PDF
+- Qualquer informação além de números e datas
+
 ## Executar Localmente
 
 Se preferir rodar no seu computador, siga as instruções abaixo.

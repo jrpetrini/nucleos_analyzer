@@ -61,7 +61,7 @@ HELP_TEXTS = {
     'cagr_nucleos': 'CAGR (Taxa de Crescimento Anual Composta) calculada usando XIRR com dias úteis brasileiros (252 dias/ano). Representa o retorno anualizado considerando todas as contribuições e suas datas exatas. O valor em R$ abaixo mostra o lucro total (posição menos investido).',
     'cagr_benchmark': 'Simula suas contribuições investidas no índice selecionado. O CAGR é calculado da mesma forma que o Nucleos. O valor em R$ abaixo mostra a posição total que você teria (não o lucro).',
     'company_as_mine': 'Quando ativado, considera as contribuições da empresa como "de graça" - você recebe o patrimônio total mas só contabiliza o que saiu do seu bolso. Isso mostra o retorno real sobre seu dinheiro. Afeta tanto o Nucleos quanto o benchmark.',
-    'pdf_upload': 'Faça upload do arquivo "extratoIndividual.pdf" do site da Nucleos. Acesse sua conta no portal Nucleos para baixar o extrato.',
+    'pdf_upload': 'Faça upload do arquivo "extratoIndividual.pdf" do site da Nucleos. ⚠️ PRIVACIDADE: O PDF contém dados pessoais. Veja como redacionar: github.com/jrpetrini/nucleos_analyzer#privacidade-e-segurança (ou execute localmente).',
 }
 
 
