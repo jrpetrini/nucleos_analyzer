@@ -1,3 +1,12 @@
+---
+title: Nucleos Analyzer
+emoji: 📊
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # Nucleos Analyzer
 
 Análise de extratos de previdência privada Nucleos com comparação de benchmarks.
