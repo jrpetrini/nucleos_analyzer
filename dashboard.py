@@ -504,19 +504,36 @@ def create_app(df_position: pd.DataFrame = None,
     app.layout = html.Div([
         # Header
         html.Div([
-            html.H1('Nucleos Analyzer', style={
-                'color': COLORS['text'],
-                'marginBottom': '0',
-                'fontSize': '2.5rem'
-            }),
-            html.P('Análise de Previdência Privada', style={
-                'color': COLORS['text_muted'],
-                'marginTop': '0.5rem'
-            })
+            html.Div([
+                html.H1('Nucleos Analyzer', style={
+                    'color': COLORS['text'],
+                    'marginBottom': '0',
+                    'fontSize': '2.5rem'
+                }),
+                html.P('Análise de Previdência Privada', style={
+                    'color': COLORS['text_muted'],
+                    'marginTop': '0.5rem'
+                })
+            ]),
+            html.A(
+                html.Img(
+                    src='https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                    style={'height': '32px', 'opacity': '0.7'}
+                ),
+                href='https://github.com/jrpetrini/nucleos_analyzer',
+                target='_blank',
+                title='Ver código no GitHub',
+                style={
+                    'position': 'absolute',
+                    'top': '1rem',
+                    'right': '1rem'
+                }
+            )
         ], style={
             'textAlign': 'center',
             'padding': '2rem',
-            'backgroundColor': COLORS['background']
+            'backgroundColor': COLORS['background'],
+            'position': 'relative'
         }),
 
         # Global toggle - Company contributions as mine
