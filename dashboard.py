@@ -8,7 +8,7 @@ import io
 import pandas as pd
 import plotly.graph_objects as go
 import dash
-from dash import Dash, dcc, html, callback, Output, Input, State
+from dash import Dash, dcc, html, callback, Output, Input, State, dash_table
 
 from calculator import calculate_summary_stats
 from benchmarks import (
@@ -62,6 +62,8 @@ HELP_TEXTS = {
     'cagr_benchmark': 'Simula suas contribuições investidas no índice selecionado. O CAGR é calculado da mesma forma que o Nucleos. O valor em R$ abaixo mostra a posição total que você teria (não o lucro).',
     'company_as_mine': 'Quando ativado, considera as contribuições da empresa como "de graça" - você recebe o patrimônio total mas só contabiliza o que saiu do seu bolso. Isso mostra o retorno real sobre seu dinheiro. Afeta tanto o Nucleos quanto o benchmark.',
     'pdf_upload': 'Faça upload do arquivo "extratoIndividual.pdf" do site da Nucleos. ⚠️ PRIVACIDADE: O PDF contém dados pessoais. Veja como redacionar: github.com/jrpetrini/nucleos_analyzer#privacidade-e-segurança (ou execute localmente).',
+    'position_table': 'Tabela com os dados do gráfico. "Simulado" mostra quanto suas contribuições valeriam se investidas no benchmark. "Índice" mostra o valor bruto do índice (normalizado para 1 no início).',
+    'contributions_table': 'Tabela com contribuições mensais, total investido acumulado e posição. Quando o toggle "empresa como sem custo" está ativo, mostra a divisão participante/patrocinador.',
 }
 
 
@@ -220,8 +222,7 @@ def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
                 'boxShadow': '0 4px 6px rgba(0,0,0,0.3)',
                 'zIndex': '1000',
                 'top': '100%',
-                'left': '50%',
-                'transform': 'translateX(-50%)',
+                'left': '0',
                 'marginTop': '5px',
                 'transition': 'opacity 0.2s, visibility 0.2s',
                 'whiteSpace': 'normal',
@@ -759,7 +760,69 @@ def create_app(df_position: pd.DataFrame = None,
                 children=[
                     dcc.Graph(id='position-graph', figure=initial_position_fig, style={'height': '500px'})
                 ]
-            )
+            ),
+            # Data Table Section
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.H3('Dados', style={'color': COLORS['text'], 'margin': '0'}),
+                        create_help_icon(HELP_TEXTS['position_table'], 'help-position-table'),
+                    ], style={'display': 'flex', 'alignItems': 'center'}),
+                    html.Div([
+                        dcc.Dropdown(
+                            id='position-export-format',
+                            options=[
+                                {'label': 'CSV', 'value': 'csv'},
+                                {'label': 'Excel', 'value': 'xlsx'}
+                            ],
+                            value='csv',
+                            clearable=False,
+                            style={'width': '100px', 'color': '#000'}
+                        ),
+                        html.Button('Exportar', id='position-export-btn', style={
+                            'backgroundColor': COLORS['primary'],
+                            'color': COLORS['text'],
+                            'border': 'none',
+                            'borderRadius': '0.5rem',
+                            'padding': '0.5rem 1rem',
+                            'cursor': 'pointer',
+                            'marginLeft': '0.5rem'
+                        }),
+                    ], style={'display': 'flex', 'alignItems': 'center'}),
+                ], style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center',
+                    'marginBottom': '1rem'
+                }),
+                dash_table.DataTable(
+                    id='position-data-table',
+                    columns=[],
+                    data=[],
+                    style_header={
+                        'backgroundColor': COLORS['card'],
+                        'color': COLORS['text'],
+                        'fontWeight': 'bold',
+                        'border': f"1px solid {COLORS['grid']}",
+                    },
+                    style_cell={
+                        'backgroundColor': COLORS['background'],
+                        'color': COLORS['text'],
+                        'border': f"1px solid {COLORS['grid']}",
+                        'textAlign': 'right',
+                        'padding': '8px 12px',
+                    },
+                    style_data_conditional=[
+                        {
+                            'if': {'row_index': 'odd'},
+                            'backgroundColor': COLORS['card'],
+                        }
+                    ],
+                    page_size=12,
+                    sort_action='native',
+                ),
+                dcc.Download(id='position-download'),
+            ], style={'marginTop': '2rem'}),
         ], style={
             'padding': '2rem',
             'backgroundColor': COLORS['background'],
@@ -769,7 +832,69 @@ def create_app(df_position: pd.DataFrame = None,
 
         # Contributions Tab Content
         html.Div(id='contributions-tab', children=[
-            dcc.Graph(id='contributions-graph', figure=contributions_fig, style={'height': '500px'})
+            dcc.Graph(id='contributions-graph', figure=contributions_fig, style={'height': '500px'}),
+            # Data Table Section
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.H3('Dados', style={'color': COLORS['text'], 'margin': '0'}),
+                        create_help_icon(HELP_TEXTS['contributions_table'], 'help-contributions-table'),
+                    ], style={'display': 'flex', 'alignItems': 'center'}),
+                    html.Div([
+                        dcc.Dropdown(
+                            id='contributions-export-format',
+                            options=[
+                                {'label': 'CSV', 'value': 'csv'},
+                                {'label': 'Excel', 'value': 'xlsx'}
+                            ],
+                            value='csv',
+                            clearable=False,
+                            style={'width': '100px', 'color': '#000'}
+                        ),
+                        html.Button('Exportar', id='contributions-export-btn', style={
+                            'backgroundColor': COLORS['primary'],
+                            'color': COLORS['text'],
+                            'border': 'none',
+                            'borderRadius': '0.5rem',
+                            'padding': '0.5rem 1rem',
+                            'cursor': 'pointer',
+                            'marginLeft': '0.5rem'
+                        }),
+                    ], style={'display': 'flex', 'alignItems': 'center'}),
+                ], style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center',
+                    'marginBottom': '1rem'
+                }),
+                dash_table.DataTable(
+                    id='contributions-data-table',
+                    columns=[],
+                    data=[],
+                    style_header={
+                        'backgroundColor': COLORS['card'],
+                        'color': COLORS['text'],
+                        'fontWeight': 'bold',
+                        'border': f"1px solid {COLORS['grid']}",
+                    },
+                    style_cell={
+                        'backgroundColor': COLORS['background'],
+                        'color': COLORS['text'],
+                        'border': f"1px solid {COLORS['grid']}",
+                        'textAlign': 'right',
+                        'padding': '8px 12px',
+                    },
+                    style_data_conditional=[
+                        {
+                            'if': {'row_index': 'odd'},
+                            'backgroundColor': COLORS['card'],
+                        }
+                    ],
+                    page_size=12,
+                    sort_action='native',
+                ),
+                dcc.Download(id='contributions-download'),
+            ], style={'marginTop': '2rem'}),
         ], style={
             'padding': '2rem',
             'backgroundColor': COLORS['background'],
@@ -1191,5 +1316,256 @@ def create_app(df_position: pd.DataFrame = None,
         else:
             base_style['backgroundColor'] = COLORS['sponsor']  # Amber
         return base_style
+
+    @callback(
+        Output('position-data-table', 'data'),
+        Output('position-data-table', 'columns'),
+        Input('start-month', 'value'),
+        Input('end-month', 'value'),
+        Input('benchmark-select', 'value'),
+        Input('overhead-select', 'value'),
+        Input('company-as-mine-toggle', 'value'),
+        State('position-data', 'data'),
+        State('contributions-data', 'data'),
+        State('date-range-data', 'data'),
+        State('benchmark-cache', 'data')
+    )
+    def update_position_table(start_date, end_date, benchmark_name, overhead,
+                              company_as_mine, position_data, contributions_data, date_range, cache):
+        """Populate position data table with Nucleos and benchmark values."""
+        if not position_data or not contributions_data:
+            return [], []
+
+        df = pd.DataFrame(position_data)
+        df['data'] = pd.to_datetime(df['data'])
+
+        df_contrib = pd.DataFrame(contributions_data)
+        df_contrib['data'] = pd.to_datetime(df_contrib['data'])
+
+        # Filter data
+        df_pos_filtered, df_contrib_filtered, _, _ = filter_data_by_range(
+            df, df_contrib, start_date, end_date
+        )
+
+        if df_pos_filtered.empty:
+            return [], []
+
+        # Build table data
+        table_data = []
+        for _, row in df_pos_filtered.iterrows():
+            table_data.append({
+                'data': row['data'].strftime('%b %Y'),
+                'posicao': f"R$ {row['posicao']:,.2f}"
+            })
+
+        # Base columns
+        columns = [
+            {'name': 'Data', 'id': 'data'},
+            {'name': 'Posição (Nucleos)', 'id': 'posicao'},
+        ]
+
+        # Add benchmark columns if benchmark selected
+        if benchmark_name and benchmark_name != 'none' and not df_contrib_filtered.empty and date_range:
+            cache = cache or {}
+            cache_key = benchmark_name
+            if cache_key in cache:
+                benchmark_raw = pd.DataFrame(cache[cache_key])
+            else:
+                benchmark_raw = fetch_single_benchmark(
+                    benchmark_name,
+                    date_range['start'],
+                    date_range['end']
+                )
+
+            if benchmark_raw is not None:
+                # Prepare contributions for simulation
+                treat_company_as_mine = 'as_mine' in (company_as_mine or [])
+                if treat_company_as_mine and 'contrib_participante' in df_contrib_filtered.columns:
+                    contrib_amounts = df_contrib_filtered['contrib_participante']
+                else:
+                    contrib_amounts = df_contrib_filtered['contribuicao_total']
+
+                df_contrib_sim = df_contrib_filtered[['data']].copy()
+                df_contrib_sim['contribuicao_total'] = contrib_amounts
+
+                # Position dates for benchmark
+                if not df_contrib_sim.empty:
+                    first_contrib_month = df_contrib_sim['data'].min().to_period('M')
+                    position_dates_for_bench = df_pos_filtered[
+                        df_pos_filtered['data'].dt.to_period('M') >= first_contrib_month
+                    ][['data']].copy()
+                else:
+                    position_dates_for_bench = df_pos_filtered[['data']].copy()
+
+                # Simulate benchmark WITHOUT overhead
+                benchmark_sim_raw = simulate_benchmark(
+                    df_contrib_sim,
+                    benchmark_raw,
+                    position_dates_for_bench
+                )
+
+                # Simulate benchmark WITH overhead
+                benchmark_with_overhead = apply_overhead_to_benchmark(benchmark_raw, overhead)
+                benchmark_sim_overhead = simulate_benchmark(
+                    df_contrib_sim,
+                    benchmark_with_overhead,
+                    position_dates_for_bench
+                )
+
+                # Add benchmark data to table
+                bench_raw_dict = {row['data'].strftime('%b %Y'): row['posicao']
+                                 for _, row in benchmark_sim_raw.iterrows()} if not benchmark_sim_raw.empty else {}
+                bench_overhead_dict = {row['data'].strftime('%b %Y'): row['posicao']
+                                       for _, row in benchmark_sim_overhead.iterrows()} if not benchmark_sim_overhead.empty else {}
+
+                # Raw index values (normalized)
+                benchmark_raw['date'] = pd.to_datetime(benchmark_raw['date'])
+                index_raw_dict = {row['date'].strftime('%b %Y'): row['value']
+                                  for _, row in benchmark_raw.iterrows()}
+                benchmark_with_overhead['date'] = pd.to_datetime(benchmark_with_overhead['date'])
+                index_overhead_dict = {row['date'].strftime('%b %Y'): row['value']
+                                       for _, row in benchmark_with_overhead.iterrows()}
+
+                for row in table_data:
+                    date_key = row['data']
+                    if date_key in bench_overhead_dict:
+                        row['bench_overhead'] = f"R$ {bench_overhead_dict[date_key]:,.2f}"
+                    else:
+                        row['bench_overhead'] = '-'
+                    if date_key in bench_raw_dict:
+                        row['bench_raw'] = f"R$ {bench_raw_dict[date_key]:,.2f}"
+                    else:
+                        row['bench_raw'] = '-'
+                    if date_key in index_overhead_dict:
+                        row['index_overhead'] = f"{index_overhead_dict[date_key]:.4f}"
+                    else:
+                        row['index_overhead'] = '-'
+                    if date_key in index_raw_dict:
+                        row['index_raw'] = f"{index_raw_dict[date_key]:.4f}"
+                    else:
+                        row['index_raw'] = '-'
+
+                # Add benchmark columns
+                overhead_label = f'{benchmark_name} +{overhead}%' if overhead > 0 else benchmark_name
+                columns.append({'name': f'{overhead_label} (simulado)', 'id': 'bench_overhead'})
+                columns.append({'name': f'{benchmark_name} (simulado)', 'id': 'bench_raw'})
+                columns.append({'name': f'{overhead_label} (índice)', 'id': 'index_overhead'})
+                columns.append({'name': f'{benchmark_name} (índice)', 'id': 'index_raw'})
+
+        return table_data, columns
+
+    @callback(
+        Output('position-download', 'data'),
+        Input('position-export-btn', 'n_clicks'),
+        State('position-data-table', 'data'),
+        State('position-export-format', 'value'),
+        prevent_initial_call=True
+    )
+    def export_position_data(n_clicks, table_data, export_format):
+        """Export position table data to CSV or Excel."""
+        if not table_data:
+            raise dash.exceptions.PreventUpdate
+
+        df = pd.DataFrame(table_data)
+
+        if export_format == 'csv':
+            return dcc.send_data_frame(df.to_csv, 'nucleos_posicao.csv', index=False)
+        else:
+            return dcc.send_data_frame(df.to_excel, 'nucleos_posicao.xlsx', index=False, engine='openpyxl')
+
+    @callback(
+        Output('contributions-data-table', 'data'),
+        Output('contributions-data-table', 'columns'),
+        Input('start-month', 'value'),
+        Input('end-month', 'value'),
+        Input('company-as-mine-toggle', 'value'),
+        State('contributions-monthly-data', 'data'),
+        State('position-data', 'data')
+    )
+    def update_contributions_table(start_date, end_date, company_as_mine,
+                                   monthly_data, position_data):
+        """Populate contributions data table."""
+        if not monthly_data:
+            return [], []
+
+        df_monthly = pd.DataFrame(monthly_data)
+        df_monthly['data'] = pd.to_datetime(df_monthly['data'])
+
+        if position_data:
+            df_pos = pd.DataFrame(position_data)
+            df_pos['data'] = pd.to_datetime(df_pos['data'])
+        else:
+            df_pos = pd.DataFrame()
+
+        # Filter by date range
+        start_dt = pd.to_datetime(start_date) if start_date else None
+        end_dt = pd.to_datetime(end_date) if end_date else None
+
+        if start_dt:
+            df_monthly = df_monthly[df_monthly['data'] >= start_dt]
+        if end_dt:
+            df_monthly = df_monthly[df_monthly['data'] <= end_dt]
+
+        if df_monthly.empty:
+            return [], []
+
+        # Calculate cumulative invested
+        show_split = 'as_mine' in (company_as_mine or [])
+        if show_split:
+            df_monthly['total_investido'] = df_monthly['contrib_participante'].cumsum()
+        else:
+            df_monthly['total_investido'] = df_monthly['contribuicao_total'].cumsum()
+
+        # Build table data
+        table_data = []
+        for _, row in df_monthly.iterrows():
+            row_data = {
+                'data': row['data'].strftime('%b %Y'),
+                'contrib_total': f"R$ {row['contribuicao_total']:,.2f}",
+                'total_investido': f"R$ {row['total_investido']:,.2f}",
+            }
+            if show_split:
+                row_data['contrib_participante'] = f"R$ {row['contrib_participante']:,.2f}"
+                row_data['contrib_patrocinador'] = f"R$ {row['contrib_patrocinador']:,.2f}"
+
+            # Add position if available
+            if not df_pos.empty:
+                pos_row = df_pos[df_pos['data'] == row['data']]
+                if not pos_row.empty:
+                    row_data['posicao'] = f"R$ {pos_row['posicao'].iloc[0]:,.2f}"
+                else:
+                    row_data['posicao'] = '-'
+            table_data.append(row_data)
+
+        # Build columns dynamically
+        columns = [{'name': 'Data', 'id': 'data'}]
+        if show_split:
+            columns.append({'name': 'Contrib. Participante', 'id': 'contrib_participante'})
+            columns.append({'name': 'Contrib. Patrocinador', 'id': 'contrib_patrocinador'})
+        columns.append({'name': 'Contrib. Total', 'id': 'contrib_total'})
+        columns.append({'name': 'Total Investido', 'id': 'total_investido'})
+        if not df_pos.empty:
+            columns.append({'name': 'Posição', 'id': 'posicao'})
+
+        return table_data, columns
+
+    @callback(
+        Output('contributions-download', 'data'),
+        Input('contributions-export-btn', 'n_clicks'),
+        State('contributions-data-table', 'data'),
+        State('contributions-export-format', 'value'),
+        prevent_initial_call=True
+    )
+    def export_contributions_data(n_clicks, table_data, export_format):
+        """Export contributions table data to CSV or Excel."""
+        if not table_data:
+            raise dash.exceptions.PreventUpdate
+
+        df = pd.DataFrame(table_data)
+
+        if export_format == 'csv':
+            return dcc.send_data_frame(df.to_csv, 'nucleos_contribuicoes.csv', index=False)
+        else:
+            return dcc.send_data_frame(df.to_excel, 'nucleos_contribuicoes.xlsx', index=False, engine='openpyxl')
 
     return app

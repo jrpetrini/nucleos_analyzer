@@ -7,3 +7,4 @@ bizdays>=1.0.0
 scipy>=1.10.0
 yfinance>=0.2.0
 python-bcb>=0.2.0
+openpyxl>=3.0.0
