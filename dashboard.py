@@ -554,10 +554,15 @@ def create_app(df_position: pd.DataFrame = None,
             'backgroundColor': COLORS['background']
         }),
 
-        # Summary Cards
-        html.Div([
-            # TODO: Fix "Posição Atual" - should match end of selected date range
-            html.Div([
+        # Summary Cards (wrapped in loading indicator)
+        dcc.Loading(
+            id='loading-summary-cards',
+            type='circle',
+            color=COLORS['primary'],
+            children=[
+                html.Div([
+                    # TODO: Fix "Posição Atual" - should match end of selected date range
+                    html.Div([
                 html.P('Posição Atual', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
                 html.H2(id='current-position-value', style={'color': COLORS['primary'], 'margin': '0.5rem 0'})
             ], style={
@@ -619,13 +624,15 @@ def create_app(df_position: pd.DataFrame = None,
                 'flex': '1',
                 'textAlign': 'center'
             }),
-        ], style={
-            'display': 'flex',
-            'gap': '1rem',
-            'padding': '0 2rem',
-            'marginBottom': '2rem',
-            'backgroundColor': COLORS['background']
-        }),
+                ], style={
+                    'display': 'flex',
+                    'gap': '1rem',
+                    'padding': '0 2rem',
+                    'marginBottom': '2rem',
+                    'backgroundColor': COLORS['background']
+                }),
+            ]
+        ),
 
         # Shared controls (persist between tabs)
         html.Div(id='date-controls', children=[
@@ -647,23 +654,30 @@ def create_app(df_position: pd.DataFrame = None,
                     style={'width': '130px', 'color': '#000'}
                 ),
                 # PDF Upload - amber when no data, primary when loaded
-                dcc.Upload(
-                    id='pdf-upload',
-                    children=html.Div([
-                        html.Span('📄 ', style={'marginRight': '0.5rem'}),
-                        'Carregar PDF'
-                    ]),
-                    style={
-                        'marginLeft': '2rem',
-                        'padding': '0.5rem 1rem',
-                        'backgroundColor': COLORS['primary'] if has_data else COLORS['sponsor'],
-                        'color': COLORS['text'],
-                        'border': 'none',
-                        'borderRadius': '0.5rem',
-                        'cursor': 'pointer',
-                        'display': 'inline-block'
-                    },
-                    accept='.pdf'
+                dcc.Loading(
+                    id='loading-pdf-upload',
+                    type='circle',
+                    color=COLORS['sponsor'],
+                    children=[
+                        dcc.Upload(
+                            id='pdf-upload',
+                            children=html.Div([
+                                html.Span('📄 ', style={'marginRight': '0.5rem'}),
+                                'Carregar PDF'
+                            ]),
+                            style={
+                                'marginLeft': '2rem',
+                                'padding': '0.5rem 1rem',
+                                'backgroundColor': COLORS['primary'] if has_data else COLORS['sponsor'],
+                                'color': COLORS['text'],
+                                'border': 'none',
+                                'borderRadius': '0.5rem',
+                                'cursor': 'pointer',
+                                'display': 'inline-block'
+                            },
+                            accept='.pdf'
+                        ),
+                    ]
                 ),
                 create_help_icon(HELP_TEXTS['pdf_upload'], 'help-pdf-upload'),
             ], style={'display': 'flex', 'alignItems': 'center'})
@@ -795,31 +809,42 @@ def create_app(df_position: pd.DataFrame = None,
                     'alignItems': 'center',
                     'marginBottom': '1rem'
                 }),
-                dash_table.DataTable(
-                    id='position-data-table',
-                    columns=[],
-                    data=[],
-                    style_header={
-                        'backgroundColor': COLORS['card'],
-                        'color': COLORS['text'],
-                        'fontWeight': 'bold',
-                        'border': f"1px solid {COLORS['grid']}",
-                    },
-                    style_cell={
-                        'backgroundColor': COLORS['background'],
-                        'color': COLORS['text'],
-                        'border': f"1px solid {COLORS['grid']}",
-                        'textAlign': 'right',
-                        'padding': '8px 12px',
-                    },
-                    style_data_conditional=[
-                        {
-                            'if': {'row_index': 'odd'},
-                            'backgroundColor': COLORS['card'],
-                        }
-                    ],
-                    page_size=12,
-                    sort_action='native',
+                dcc.Loading(
+                    id='loading-position-table',
+                    type='circle',
+                    color=COLORS['primary'],
+                    children=[
+                        dash_table.DataTable(
+                            id='position-data-table',
+                            columns=[],
+                            data=[],
+                            style_header={
+                                'backgroundColor': COLORS['card'],
+                                'color': COLORS['text'],
+                                'fontWeight': 'bold',
+                                'border': f"1px solid {COLORS['grid']}",
+                            },
+                            style_cell={
+                                'backgroundColor': COLORS['background'],
+                                'color': COLORS['text'],
+                                'border': f"1px solid {COLORS['grid']}",
+                                'textAlign': 'right',
+                                'padding': '8px 12px',
+                            },
+                            style_data_conditional=[
+                                {
+                                    'if': {'row_index': 'odd'},
+                                    'backgroundColor': COLORS['card'],
+                                }
+                            ],
+                            style_table={
+                                'overflowY': 'auto',
+                                'maxHeight': '400px',
+                            },
+                            page_action='none',
+                            sort_action='native',
+                        ),
+                    ]
                 ),
                 dcc.Download(id='position-download'),
             ], style={'marginTop': '2rem'}),
@@ -832,7 +857,12 @@ def create_app(df_position: pd.DataFrame = None,
 
         # Contributions Tab Content
         html.Div(id='contributions-tab', children=[
-            dcc.Graph(id='contributions-graph', figure=contributions_fig, style={'height': '500px'}),
+            dcc.Loading(
+                id='loading-contributions-graph',
+                type='circle',
+                color=COLORS['primary'],
+                children=[dcc.Graph(id='contributions-graph', figure=contributions_fig, style={'height': '500px'})]
+            ),
             # Data Table Section
             html.Div([
                 html.Div([
@@ -867,31 +897,42 @@ def create_app(df_position: pd.DataFrame = None,
                     'alignItems': 'center',
                     'marginBottom': '1rem'
                 }),
-                dash_table.DataTable(
-                    id='contributions-data-table',
-                    columns=[],
-                    data=[],
-                    style_header={
-                        'backgroundColor': COLORS['card'],
-                        'color': COLORS['text'],
-                        'fontWeight': 'bold',
-                        'border': f"1px solid {COLORS['grid']}",
-                    },
-                    style_cell={
-                        'backgroundColor': COLORS['background'],
-                        'color': COLORS['text'],
-                        'border': f"1px solid {COLORS['grid']}",
-                        'textAlign': 'right',
-                        'padding': '8px 12px',
-                    },
-                    style_data_conditional=[
-                        {
-                            'if': {'row_index': 'odd'},
-                            'backgroundColor': COLORS['card'],
-                        }
-                    ],
-                    page_size=12,
-                    sort_action='native',
+                dcc.Loading(
+                    id='loading-contributions-table',
+                    type='circle',
+                    color=COLORS['primary'],
+                    children=[
+                        dash_table.DataTable(
+                            id='contributions-data-table',
+                            columns=[],
+                            data=[],
+                            style_header={
+                                'backgroundColor': COLORS['card'],
+                                'color': COLORS['text'],
+                                'fontWeight': 'bold',
+                                'border': f"1px solid {COLORS['grid']}",
+                            },
+                            style_cell={
+                                'backgroundColor': COLORS['background'],
+                                'color': COLORS['text'],
+                                'border': f"1px solid {COLORS['grid']}",
+                                'textAlign': 'right',
+                                'padding': '8px 12px',
+                            },
+                            style_data_conditional=[
+                                {
+                                    'if': {'row_index': 'odd'},
+                                    'backgroundColor': COLORS['card'],
+                                }
+                            ],
+                            style_table={
+                                'overflowY': 'auto',
+                                'maxHeight': '400px',
+                            },
+                            page_action='none',
+                            sort_action='native',
+                        ),
+                    ]
                 ),
                 dcc.Download(id='contributions-download'),
             ], style={'marginTop': '2rem'}),
