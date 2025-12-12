@@ -72,6 +72,32 @@ dcc.Loading(
 )
 ```
 
+**Position Data Table (lines ~798):**
+The position data table runs benchmark simulation twice (with and without overhead), making it slow when benchmark is selected.
+```python
+dcc.Loading(
+    id='loading-position-table',
+    type='circle',
+    color=COLORS['primary'],
+    children=[
+        dash_table.DataTable(id='position-data-table', ...)
+    ]
+)
+```
+
+**Contributions Data Table (lines ~870):**
+Updates when date range or company toggle changes.
+```python
+dcc.Loading(
+    id='loading-contributions-table',
+    type='circle',
+    color=COLORS['primary'],
+    children=[
+        dash_table.DataTable(id='contributions-data-table', ...)
+    ]
+)
+```
+
 #### 2. Add Custom Spinner Styles to assets/style.css
 
 ```css
@@ -115,6 +141,8 @@ if benchmark_name and benchmark_name != 'none':
 - [ ] Spinner appears when selecting benchmark
 - [ ] Spinner appears when changing overhead
 - [ ] Spinner appears during PDF upload
+- [ ] Spinner appears on position data table during benchmark updates
+- [ ] Spinner appears on contributions data table during date range changes
 - [ ] Spinner disappears when calculation completes
 - [ ] Spinner doesn't block user interaction with other controls
 - [ ] No flashing/flickering of spinners for fast operations (<200ms)
