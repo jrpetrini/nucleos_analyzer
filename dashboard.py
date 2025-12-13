@@ -1469,28 +1469,32 @@ def create_app(df_position: pd.DataFrame = None,
 
                 for row in table_data:
                     date_key = row['data']
-                    if date_key in bench_overhead_dict:
-                        row['bench_overhead'] = f"R$ {bench_overhead_dict[date_key]:,.2f}"
-                    else:
-                        row['bench_overhead'] = '-'
+                    # Only add overhead columns if overhead > 0
+                    if overhead > 0:
+                        if date_key in bench_overhead_dict:
+                            row['bench_overhead'] = f"R$ {bench_overhead_dict[date_key]:,.2f}"
+                        else:
+                            row['bench_overhead'] = '-'
+                        if date_key in index_overhead_dict:
+                            row['index_overhead'] = f"{index_overhead_dict[date_key]:.4f}"
+                        else:
+                            row['index_overhead'] = '-'
+                    # Always add raw benchmark columns
                     if date_key in bench_raw_dict:
                         row['bench_raw'] = f"R$ {bench_raw_dict[date_key]:,.2f}"
                     else:
                         row['bench_raw'] = '-'
-                    if date_key in index_overhead_dict:
-                        row['index_overhead'] = f"{index_overhead_dict[date_key]:.4f}"
-                    else:
-                        row['index_overhead'] = '-'
                     if date_key in index_raw_dict:
                         row['index_raw'] = f"{index_raw_dict[date_key]:.4f}"
                     else:
                         row['index_raw'] = '-'
 
-                # Add benchmark columns
-                overhead_label = f'{benchmark_name} +{overhead}%' if overhead > 0 else benchmark_name
-                columns.append({'name': f'{overhead_label} (simulado)', 'id': 'bench_overhead'})
+                # Add benchmark columns - only show overhead columns if overhead > 0
+                if overhead > 0:
+                    columns.append({'name': f'{benchmark_name} +{overhead}% (simulado)', 'id': 'bench_overhead'})
                 columns.append({'name': f'{benchmark_name} (simulado)', 'id': 'bench_raw'})
-                columns.append({'name': f'{overhead_label} (índice)', 'id': 'index_overhead'})
+                if overhead > 0:
+                    columns.append({'name': f'{benchmark_name} +{overhead}% (índice)', 'id': 'index_overhead'})
                 columns.append({'name': f'{benchmark_name} (índice)', 'id': 'index_raw'})
 
         return table_data, columns
