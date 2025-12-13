@@ -5,18 +5,25 @@ Sequential implementation of 4 major dashboard features, each in its own feature
 
 **Branch Strategy:** Sequential (one at a time, merge to master, then next)
 
-**Order & Rationale:**
-1. Loading indicators (foundational - benefits all other features)
-2. Inflation adjustment (core financial logic - must be stable before forecasting)
-3. Forecasting (builds on inflation adjustment infrastructure)
-4. Mobile responsiveness (UI polish - minimal logic conflicts)
+## Status Summary
+
+| # | Feature | Status | Commit |
+|---|---------|--------|--------|
+| 1 | Loading Indicators | ✅ DONE | ad0f6bf |
+| 2 | Inflation Adjustment | ✅ DONE | 9b87c8d |
+| 3 | Forecasting | 🔲 TODO | - |
+| 4 | Mobile Responsiveness | 🔲 TODO | - |
+
+**Additional Work:**
+- Test Suite: 47 tests (commit e9e8a5f)
+- Business Day Calculation: Under investigation (see .claude/plans/vivid-napping-rainbow.md)
 
 ---
 
-# Feature 1: Loading Indicators
+# Feature 1: Loading Indicators ✅ DONE
 
 **Branch:** `feature/loading-indicators`
-**Estimated Duration:** 1-2 days
+**Completed:** December 2025
 **Priority:** CRITICAL (foundational)
 
 ## Problem Statement
@@ -153,10 +160,10 @@ if benchmark_name and benchmark_name != 'none':
 
 ---
 
-# Feature 2: Inflation Adjustment
+# Feature 2: Inflation Adjustment ✅ DONE
 
 **Branch:** `feature/inflation-adjustment`
-**Estimated Duration:** 3-4 days
+**Completed:** December 2025
 **Priority:** HIGH (core financial feature)
 
 ## Problem Statement
