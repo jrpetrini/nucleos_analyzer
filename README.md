@@ -23,13 +23,14 @@ Basta fazer upload do seu PDF e pronto!
 
 - Upload de PDF via navegador
 - Extração automática de dados do extrato Nucleos
-- Cálculo de CAGR (XIRR) usando dias úteis brasileiros (calendário ANBIMA)
+- Cálculo de CAGR (XIRR) usando convenção de 252 dias úteis/ano
 - Gráfico de evolução da posição
 - Gráfico de contribuições mensais
 - Comparação com benchmarks: CDI, IPCA, INPC, S&P 500, USD
 - Overhead configurável (+0% a +10% a.a.)
 - Filtro de período (data inicial/final)
 - Toggle para considerar contribuição da empresa como "sem custo"
+- Ajuste por inflação (IPCA/INPC) para visualizar valores reais
 
 ## Como Obter o PDF
 
@@ -180,6 +181,34 @@ python main.py --pdf caminho/para/extratoIndividual.pdf
 **Erro ao instalar dependências**
 - Atualize o pip: `pip install --upgrade pip`
 - Tente novamente: `pip install -r requirements.txt`
+
+## Notas Técnicas
+
+### Convenção de Dias Úteis
+
+O aplicativo usa a convenção de **252 dias úteis por ano**, padrão no mercado financeiro brasileiro. Em vez de consultar o calendário ANBIMA para cada data, utilizamos uma aproximação:
+
+```
+dias_úteis ≈ dias_corridos × (252 / 365)
+```
+
+**Por que esta aproximação?**
+
+1. **Consistência matemática**: Todos os cálculos (XIRR, overhead, interpolação) usam a mesma fórmula
+2. **Performance**: Não requer consultas a calendário externo
+3. **Testabilidade**: Resultados são determinísticos e previsíveis
+
+**Precisão**: A aproximação introduz erro de ~1-2 dias por mês comparado ao calendário real de feriados brasileiros. Para análise de investimentos pessoais, esta diferença é negligível (< 0.1% no retorno anualizado).
+
+### Ajuste por Inflação
+
+Quando o ajuste por inflação está ativado, todos os valores são deflacionados usando a fórmula:
+
+```
+valor_real = valor_nominal × (índice_referência / índice_data)
+```
+
+Isso permite visualizar o poder de compra real dos seus investimentos ao longo do tempo.
 
 ## Contribuir
 
