@@ -8,5 +8,3 @@ scipy>=1.10.0
 yfinance>=0.2.0
 python-bcb>=0.2.0
 openpyxl>=3.0.0
-pytest>=7.0.0
-pytest-cov>=4.0.0

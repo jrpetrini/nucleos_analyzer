@@ -1,42 +1,28 @@
 #!/usr/bin/env python3
 """
 Financial calculations and data processing for Nucleos Analyzer.
-
-Note on Business Day Convention:
-    All calculations use 252 business days per year, approximated from calendar
-    days using the ratio (252/365). This provides:
-    - Consistent results across all calculations
-    - No dependency on calendar lookups (faster)
-    - Deterministic results for testing
-
-    The approximation introduces ~1-2 days error per month compared to actual
-    Brazilian holidays, but ensures internal mathematical consistency.
 """
 
 import pandas as pd
+from bizdays import Calendar
 from scipy.optimize import brentq
 from pyxirr import xirr
 
-
-# Business day conversion constant
-BUSINESS_DAYS_PER_YEAR = 252
-CALENDAR_DAYS_PER_YEAR = 365
-BIZ_DAY_RATIO = BUSINESS_DAYS_PER_YEAR / CALENDAR_DAYS_PER_YEAR  # ~0.6904
+# Load Brazilian ANBIMA calendar for business day calculations
+ANBIMA_CAL = Calendar.load('ANBIMA')
 
 
-def xirr_bizdays(dates: list, amounts: list) -> float | None:
+def xirr_bizdays(dates: list, amounts: list, cal: Calendar = ANBIMA_CAL) -> float | None:
     """
-    Calculate XIRR using 252 business days per year convention.
+    Calculate XIRR using Brazilian business days (252 days/year).
 
-    This provides annualized returns consistent with Brazilian investment
-    conventions where returns are typically quoted in "dias úteis" (business days).
-
-    Uses calendar days converted via (252/365) ratio for consistency with
-    other calculations in the application.
+    This provides a more accurate annualized return for Brazilian investments
+    where returns are typically quoted in "dias úteis" (business days).
 
     Args:
         dates: List of dates for each cash flow
         amounts: List of amounts (negative = outflow, positive = inflow)
+        cal: Business day calendar (default: ANBIMA)
 
     Returns:
         Annualized return rate based on 252 business days, or None if no solution
@@ -44,15 +30,17 @@ def xirr_bizdays(dates: list, amounts: list) -> float | None:
     if len(dates) != len(amounts) or len(dates) < 2:
         return None
 
-    # Convert dates to timestamps
-    dates = [pd.Timestamp(d) for d in dates]
+    # Convert dates to date objects if needed
+    dates = [pd.Timestamp(d).date() for d in dates]
     first_date = min(dates)
 
-    # Calculate approximate business days using 252/365 ratio
+    # Calculate business days from first date to each cash flow date
     biz_days = []
     for d in dates:
-        calendar_days = (d - first_date).days
-        biz_days.append(calendar_days * BIZ_DAY_RATIO)
+        if d == first_date:
+            biz_days.append(0)
+        else:
+            biz_days.append(cal.bizdays(first_date, d))
 
     def npv(rate):
         """Calculate NPV using business days / 252."""
@@ -60,7 +48,7 @@ def xirr_bizdays(dates: list, amounts: list) -> float | None:
             return float('inf')
         total = 0
         for amt, days in zip(amounts, biz_days):
-            total += amt / ((1 + rate) ** (days / BUSINESS_DAYS_PER_YEAR))
+            total += amt / ((1 + rate) ** (days / 252))
         return total
 
     # Use brentq with bracket [-0.99, 10] (i.e., -99% to 1000% annual return)
@@ -71,7 +59,7 @@ def xirr_bizdays(dates: list, amounts: list) -> float | None:
     except ValueError:
         # No solution in bracket, try standard xirr as fallback
         try:
-            return xirr([d.date() for d in dates], amounts)
+            return xirr(dates, amounts)
         except Exception:
             return None
 

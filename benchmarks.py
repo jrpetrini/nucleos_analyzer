@@ -175,10 +175,6 @@ def get_value_on_date(df: pd.DataFrame, target_date: pd.Timestamp,
     For dates beyond available data: extrapolates using the provided annual rate,
     or uses the average historical rate if not provided.
 
-    Uses 252 business days per year convention, approximated from calendar days
-    using the ratio (252/365). This provides consistent results across all
-    calculations without requiring calendar lookups.
-
     Returns:
         tuple: (value, actual_date) where actual_date is the reference date used
     """
@@ -199,16 +195,22 @@ def get_value_on_date(df: pd.DataFrame, target_date: pd.Timestamp,
     if target_date > last_date:
         last_value = df['value'].iloc[-1]
 
-        # Calculate extrapolation rate using 252 business days/year convention
+        # Calculate extrapolation rate using Brazilian business days (252/year)
         if extrapolate_annual_rate is not None:
             annual_rate = extrapolate_annual_rate
         elif len(df) > 1:
             # Use historical average rate from the data
             first_value = df['value'].iloc[0]
             first_date = df['date'].iloc[0]
-            # Approximate business days using 252/365 ratio
-            calendar_days = (last_date - first_date).days
-            years = (calendar_days * 252 / 365) / 252  # = calendar_days / 365
+            # Use business days for consistency with XIRR
+            try:
+                import bizdays
+                cal = bizdays.Calendar.load('ANBIMA')
+                bizdays_total = cal.bizdays(first_date, last_date)
+                years = bizdays_total / 252
+            except Exception:
+                # Fallback to calendar days if bizdays fails
+                years = (last_date - first_date).days / 365
 
             if years > 0 and first_value > 0:
                 annual_rate = ((last_value / first_value) ** (1 / years) - 1) * 100
@@ -217,11 +219,18 @@ def get_value_on_date(df: pd.DataFrame, target_date: pd.Timestamp,
         else:
             annual_rate = 0
 
-        # Extrapolate using approximate business days
-        calendar_days_diff = (target_date - last_date).days
-        biz_days_diff = calendar_days_diff * (252 / 365)
-        annual_factor = 1 + (annual_rate / 100)
-        value = last_value * (annual_factor ** (biz_days_diff / 252))
+        # Extrapolate using business days
+        try:
+            import bizdays
+            cal = bizdays.Calendar.load('ANBIMA')
+            bizdays_diff = cal.bizdays(last_date, target_date)
+            annual_factor = 1 + (annual_rate / 100)
+            value = last_value * (annual_factor ** (bizdays_diff / 252))
+        except Exception:
+            # Fallback to calendar days
+            days_diff = (target_date - last_date).days
+            annual_factor = 1 + (annual_rate / 100)
+            value = last_value * (annual_factor ** (days_diff / 365))
 
         return value, last_date
 
@@ -251,7 +260,6 @@ def get_value_on_date(df: pd.DataFrame, target_date: pd.Timestamp,
 
         if total_days > 0 and prev_value > 0 and next_value > 0:
             # Geometric interpolation: value = prev * (next/prev)^(fraction)
-            # Note: fraction is the same whether using calendar or business days
             fraction = days_from_prev / total_days
             value = prev_value * ((next_value / prev_value) ** fraction)
             return value, target_date
@@ -338,9 +346,8 @@ def apply_overhead_to_benchmark(benchmark_data: pd.DataFrame, annual_overhead_pc
     For example, if the benchmark is INPC and overhead is 4%,
     this simulates investing in "INPC + 4% a.a."
 
-    Uses 252 business days per year convention, approximated from calendar days
-    using the ratio (252/365). This provides consistent results across all
-    calculations without requiring calendar lookups.
+    Uses 252 business days per year (Brazilian ANBIMA calendar) to match
+    the XIRR calculation convention.
 
     Args:
         benchmark_data: DataFrame with 'date' and 'value' columns
@@ -352,14 +359,16 @@ def apply_overhead_to_benchmark(benchmark_data: pd.DataFrame, annual_overhead_pc
     if annual_overhead_pct == 0:
         return benchmark_data.copy()
 
+    from bizdays import Calendar
+    cal = Calendar.load('ANBIMA')
+
     df = benchmark_data.copy()
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date').reset_index(drop=True)
 
-    # Calculate approximate business days using 252/365 ratio
-    first_date = df['date'].iloc[0]
-    df['calendar_days'] = (df['date'] - first_date).dt.days
-    df['biz_days'] = df['calendar_days'] * (252 / 365)
+    # Calculate business days between each point and first date
+    first_date = df['date'].iloc[0].date()
+    df['biz_days'] = df['date'].apply(lambda d: cal.bizdays(first_date, d.date()))
 
     # Apply compound overhead: value * (1 + overhead)^(biz_days/252)
     annual_factor = 1 + (annual_overhead_pct / 100)
