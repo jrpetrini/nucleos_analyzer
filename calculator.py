@@ -126,6 +126,100 @@ def process_contributions_data(df_contributions: pd.DataFrame) -> pd.DataFrame:
     return df_monthly
 
 
+def deflate_series(df: pd.DataFrame,
+                   inflation_index: pd.DataFrame,
+                   base_date: pd.Timestamp,
+                   value_col: str = 'posicao') -> pd.DataFrame:
+    """
+    Deflate a time series by inflation index to show real values.
+
+    Real value = nominal_value * (base_inflation / date_inflation)
+    This adjusts all values to the purchasing power of the base_date.
+
+    Uses geometric interpolation for dates between monthly data points,
+    which properly handles contributions that occur mid-month.
+
+    Args:
+        df: DataFrame with 'data' column and value columns
+        inflation_index: IPCA data with 'date' and 'value' columns
+        base_date: Reference date for real values (values adjusted to this date's BRL)
+        value_col: Column name to deflate
+
+    Returns:
+        DataFrame with additional '{value_col}_real' column
+    """
+    from benchmarks import get_value_on_date
+
+    df = df.copy()
+    base_date = pd.Timestamp(base_date).normalize()
+
+    # Get base inflation value using interpolation
+    base_inflation_value, _ = get_value_on_date(inflation_index, base_date)
+
+    if base_inflation_value is None:
+        # Can't deflate without base value
+        df[f'{value_col}_real'] = df[value_col]
+        return df
+
+    # Deflate each row using interpolated values
+    real_values = []
+    for _, row in df.iterrows():
+        date = pd.Timestamp(row['data']).normalize()
+        nominal_value = row[value_col]
+
+        # Get interpolated inflation index for this date
+        inflation_value, _ = get_value_on_date(inflation_index, date)
+
+        if inflation_value is not None and inflation_value > 0:
+            # Real value = nominal × (base_inflation / date_inflation)
+            real_value = nominal_value * (base_inflation_value / inflation_value)
+        else:
+            real_value = nominal_value
+
+        real_values.append(real_value)
+
+    df[f'{value_col}_real'] = real_values
+    return df
+
+
+def apply_deflation(df_position: pd.DataFrame,
+                    df_contributions: pd.DataFrame,
+                    inflation_index: pd.DataFrame = None,
+                    reference_date: pd.Timestamp = None) -> tuple:
+    """
+    Apply inflation deflation to position and contribution data in-place.
+
+    If inflation_index is None, returns data unchanged (no-op).
+    Otherwise, replaces values with deflated values (no new columns).
+
+    Args:
+        df_position: Position data with 'data' and 'posicao' columns
+        df_contributions: Contributions data with 'data' and contribution columns
+        inflation_index: Deflator data (IPCA/INPC/USD), or None to skip
+        reference_date: Reference date for real values
+
+    Returns:
+        tuple: (df_position, df_contributions) with values deflated in-place
+    """
+    if inflation_index is None or reference_date is None:
+        return df_position, df_contributions
+
+    # Deflate position - use helper then copy back
+    df_pos = deflate_series(df_position, inflation_index, reference_date, 'posicao')
+    df_pos['posicao'] = df_pos['posicao_real']
+    df_pos = df_pos.drop(columns=['posicao_real'])
+
+    # Deflate contributions
+    df_contrib = df_contributions.copy()
+    for col in ['contribuicao_total', 'contrib_participante', 'contrib_patrocinador']:
+        if col in df_contrib.columns:
+            df_contrib = deflate_series(df_contrib, inflation_index, reference_date, col)
+            df_contrib[col] = df_contrib[f'{col}_real']
+            df_contrib = df_contrib.drop(columns=[f'{col}_real'])
+
+    return df_pos, df_contrib
+
+
 def calculate_summary_stats(df_position: pd.DataFrame,
                             df_contributions_raw: pd.DataFrame,
                             df_contributions_monthly: pd.DataFrame) -> dict:

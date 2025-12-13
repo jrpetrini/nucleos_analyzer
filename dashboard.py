@@ -64,6 +64,7 @@ HELP_TEXTS = {
     'pdf_upload': 'Faça upload do arquivo "extratoIndividual.pdf" do site da Nucleos. ⚠️ PRIVACIDADE: O PDF contém dados pessoais. Veja como redacionar: github.com/jrpetrini/nucleos_analyzer#privacidade-e-segurança (ou execute localmente).',
     'position_table': 'Tabela com os dados do gráfico. "Simulado" mostra quanto suas contribuições valeriam se investidas no benchmark. "Índice" mostra o valor bruto do índice (normalizado para 1 no início).',
     'contributions_table': 'Tabela com contribuições mensais, total investido acumulado e posição. Quando o toggle "empresa como sem custo" está ativo, mostra a divisão participante/patrocinador.',
+    'inflation_adjustment': 'Ajusta valores para mostrar retornos reais. IPCA: inflação oficial. INPC: inflação para salários. Valores são ajustados para o mês de referência.',
 }
 
 
@@ -349,17 +350,38 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         ))
 
     # Add cumulative invested line
-    invested_cumsum = df_contributions['contribuicao_total'].cumsum()
+    # When show_split is ON, "Total Investido" shows only participant contributions (what you actually invested)
+    if show_split and 'contrib_participante' in df_contributions.columns:
+        invested_cumsum = df_contributions['contrib_participante'].cumsum()
+        invested_label = 'Total Investido (Participante)'
+    else:
+        invested_cumsum = df_contributions['contribuicao_total'].cumsum()
+        invested_label = 'Total Investido'
+
     fig.add_trace(go.Scatter(
         x=df_contributions['data'],
         y=invested_cumsum,
         mode='lines+markers',
-        name='Total Investido',
+        name=invested_label,
         line=dict(color=COLORS['accent'], width=3),
         marker=dict(size=6),
         yaxis='y2',
-        hovertemplate='<b>%{x|%b %Y}</b><br>Total Investido: R$ %{y:,.2f}<extra></extra>'
+        hovertemplate='<b>%{x|%b %Y}</b><br>' + invested_label + ': R$ %{y:,.2f}<extra></extra>'
     ))
+
+    # When show_split is ON, add a separate curve for total contributions (participant + company)
+    if show_split and 'contrib_participante' in df_contributions.columns:
+        total_cumsum = df_contributions['contribuicao_total'].cumsum()
+        fig.add_trace(go.Scatter(
+            x=df_contributions['data'],
+            y=total_cumsum,
+            mode='lines+markers',
+            name='Contribuição Total',
+            line=dict(color=COLORS['sponsor'], width=2, dash='dash'),
+            marker=dict(size=5),
+            yaxis='y2',
+            hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição Total: R$ %{y:,.2f}<extra></extra>'
+        ))
 
     # Add position curve (already adjusted relative to start of range)
     if df_position is not None and not df_position.empty:
@@ -554,6 +576,57 @@ def create_app(df_position: pd.DataFrame = None,
             'backgroundColor': COLORS['background']
         }),
 
+        # Inflation Adjustment Controls (wrapped in loading indicator)
+        html.Div([
+            dcc.Loading(
+                id='loading-inflation',
+                type='circle',
+                color=COLORS['primary'],
+                children=[
+                    html.Div([
+                        dcc.Checklist(
+                            id='inflation-toggle',
+                            options=[{'label': ' Ajustar pela inflação', 'value': 'adjust'}],
+                            value=[],  # Default: OFF
+                            style={'color': COLORS['text']},
+                            labelStyle={'display': 'flex', 'alignItems': 'center'}
+                        ),
+                        create_help_icon(HELP_TEXTS['inflation_adjustment'], 'help-inflation'),
+                        html.Div(id='inflation-controls-wrapper', children=[
+                            html.Label('Índice:', id='inflation-index-label',
+                                       style={'color': COLORS['text_muted'], 'marginLeft': '1rem'}),
+                            dcc.Dropdown(
+                                id='inflation-index-select',
+                                options=[
+                                    {'label': 'IPCA', 'value': 'IPCA'},
+                                    {'label': 'INPC', 'value': 'INPC'},
+                                ],
+                                value='IPCA',
+                                clearable=False,
+                                style={'width': '100px', 'color': '#000', 'opacity': '0.5'},
+                                disabled=True
+                            ),
+                            html.Label('Mês Ref.:', id='inflation-ref-label',
+                                       style={'color': COLORS['text_muted'], 'marginLeft': '1rem'}),
+                            dcc.Dropdown(
+                                id='inflation-reference-month',
+                                options=month_options,
+                                value=max_date.isoformat() if max_date else None,
+                                clearable=False,
+                                style={'width': '130px', 'color': '#000', 'opacity': '0.5'},
+                                disabled=True
+                            ),
+                        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '0.5rem'}),
+                        # Hidden element for loading indicator trigger
+                        html.Div(id='inflation-loading-trigger', style={'display': 'none'}),
+                    ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center', 'gap': '0.5rem'})
+                ]
+            )
+        ], style={
+            'padding': '0 2rem 1rem 2rem',
+            'backgroundColor': COLORS['background']
+        }),
+
         # Summary Cards (wrapped in loading indicator)
         dcc.Loading(
             id='loading-summary-cards',
@@ -561,9 +634,8 @@ def create_app(df_position: pd.DataFrame = None,
             color=COLORS['primary'],
             children=[
                 html.Div([
-                    # TODO: Fix "Posição Atual" - should match end of selected date range
                     html.Div([
-                html.P('Posição Atual', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
+                html.P(id='position-label', children='Posição', style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
                 html.H2(id='current-position-value', style={'color': COLORS['primary'], 'margin': '0.5rem 0'})
             ], style={
                 'backgroundColor': COLORS['card'],
@@ -943,10 +1015,14 @@ def create_app(df_position: pd.DataFrame = None,
             'display': 'none'
         }),
 
-        # Store data for callbacks
+        # Store data for callbacks (display versions - may be deflated)
         dcc.Store(id='position-data', data=position_data),
         dcc.Store(id='contributions-data', data=contributions_data),
         dcc.Store(id='contributions-monthly-data', data=contributions_monthly_data),
+        # Original data (never deflated - source of truth)
+        dcc.Store(id='position-data-original', data=position_data),
+        dcc.Store(id='contributions-data-original', data=contributions_data),
+        dcc.Store(id='contributions-monthly-data-original', data=contributions_monthly_data),
         dcc.Store(id='data-loaded', data=has_data),
         dcc.Store(id='date-range-data', data={'start': start_date_str, 'end': end_date_str}),
         dcc.Store(id='benchmark-cache', data={}),
@@ -980,6 +1056,117 @@ def create_app(df_position: pd.DataFrame = None,
         return position_style, contributions_style
 
     @callback(
+        Output('inflation-index-select', 'disabled'),
+        Output('inflation-reference-month', 'disabled'),
+        Output('inflation-index-select', 'style'),
+        Output('inflation-reference-month', 'style'),
+        Output('inflation-index-label', 'style'),
+        Output('inflation-ref-label', 'style'),
+        Input('inflation-toggle', 'value')
+    )
+    def toggle_inflation_controls(inflation_toggle):
+        """Enable/disable inflation controls based on toggle."""
+        is_enabled = 'adjust' in (inflation_toggle or [])
+
+        if is_enabled:
+            dropdown_style = {'width': '100px', 'color': '#000'}
+            ref_dropdown_style = {'width': '130px', 'color': '#000'}
+            label_style = {'color': COLORS['text'], 'marginLeft': '1rem'}
+        else:
+            dropdown_style = {'width': '100px', 'color': '#000', 'opacity': '0.5'}
+            ref_dropdown_style = {'width': '130px', 'color': '#000', 'opacity': '0.5'}
+            label_style = {'color': COLORS['text_muted'], 'marginLeft': '1rem'}
+
+        return (not is_enabled, not is_enabled,
+                dropdown_style, ref_dropdown_style,
+                label_style, label_style)
+
+    @callback(
+        Output('inflation-reference-month', 'options'),
+        Output('inflation-reference-month', 'value'),
+        Input('month-options', 'data'),
+        State('inflation-reference-month', 'value'),
+    )
+    def update_inflation_reference_options(month_options, current_value):
+        """Update reference month options when data is loaded."""
+        if not month_options:
+            return [], None
+        # Default to first month (start date) - show everything in original BRL
+        if current_value is None or current_value not in [opt['value'] for opt in month_options]:
+            return month_options, month_options[0]['value']
+        return month_options, current_value
+
+    @callback(
+        Output('position-data', 'data', allow_duplicate=True),
+        Output('contributions-data', 'data', allow_duplicate=True),
+        Output('contributions-monthly-data', 'data', allow_duplicate=True),
+        Output('inflation-loading-trigger', 'children'),
+        Input('inflation-toggle', 'value'),
+        Input('inflation-index-select', 'value'),
+        Input('inflation-reference-month', 'value'),
+        State('position-data-original', 'data'),
+        State('contributions-data-original', 'data'),
+        State('contributions-monthly-data-original', 'data'),
+        State('date-range-data', 'data'),
+        prevent_initial_call=True
+    )
+    def apply_inflation_adjustment(inflation_toggle, inflation_index, reference_month,
+                                   position_original, contributions_original,
+                                   contributions_monthly_original, date_range):
+        """Apply or remove inflation adjustment to display data."""
+        from calculator import apply_deflation
+
+        # If no data loaded, do nothing
+        if not position_original:
+            raise dash.exceptions.PreventUpdate
+
+        is_inflation_on = 'adjust' in (inflation_toggle or [])
+
+        if not is_inflation_on:
+            # Inflation OFF: use original data as-is
+            return position_original, contributions_original, contributions_monthly_original, ''
+
+        # Inflation ON: fetch index and deflate
+        if not reference_month or not date_range:
+            raise dash.exceptions.PreventUpdate
+
+        # Fetch the selected inflation index
+        # Extend start date by 1 month to cover base reference (previous month's index)
+        extended_start = (pd.Timestamp(date_range['start']) - pd.DateOffset(months=1)).replace(day=1)
+        inflation_data = fetch_single_benchmark(
+            inflation_index,
+            extended_start.isoformat(),
+            date_range['end']
+        )
+
+        if inflation_data is None:
+            # Can't fetch index, keep original
+            return position_original, contributions_original, contributions_monthly_original, ''
+
+        # Convert to DataFrames and apply deflation
+        df_pos = pd.DataFrame(position_original)
+        df_pos['data'] = pd.to_datetime(df_pos['data'])
+
+        df_contrib = pd.DataFrame(contributions_original)
+        df_contrib['data'] = pd.to_datetime(df_contrib['data'])
+
+        # Apply deflation to position and raw contributions (using exact dates)
+        df_pos_deflated, df_contrib_deflated = apply_deflation(
+            df_pos, df_contrib, inflation_data, reference_month
+        )
+
+        # Re-aggregate monthly from deflated raw contributions (not deflating pre-aggregated data)
+        from calculator import process_contributions_data
+        df_contrib_monthly_deflated = process_contributions_data(df_contrib_deflated)
+
+        return (
+            df_pos_deflated.to_dict('records'),
+            df_contrib_deflated.to_dict('records'),
+            df_contrib_monthly_deflated.to_dict('records'),
+            '',
+        )
+
+    @callback(
         Output('end-month', 'options'),
         Output('end-month', 'value'),
         Input('start-month', 'value'),
@@ -1009,6 +1196,7 @@ def create_app(df_position: pd.DataFrame = None,
         return filtered_options, new_end
 
     @callback(
+        Output('position-label', 'children'),
         Output('current-position-value', 'children'),
         Output('total-invested-value', 'children'),
         Output('nucleos-cagr-value', 'children'),
@@ -1018,13 +1206,13 @@ def create_app(df_position: pd.DataFrame = None,
         Input('company-as-mine-toggle', 'value'),
         Input('start-month', 'value'),
         Input('end-month', 'value'),
-        State('contributions-data', 'data'),
-        State('position-data', 'data'),
+        Input('contributions-data', 'data'),
+        Input('position-data', 'data'),
     )
     def update_nucleos_stats(company_as_mine, start_date, end_date, contributions_data, position_data):
         # Guard for empty data
         if not contributions_data or not position_data:
-            return ('R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
+            return ('Posição', 'R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
                     'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
 
         df_contrib = pd.DataFrame(contributions_data)
@@ -1038,7 +1226,7 @@ def create_app(df_position: pd.DataFrame = None,
         )
 
         if df_pos_filtered.empty:
-            return ('R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
+            return ('Posição', 'R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
                     'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
 
         # Toggle ON = company as mine = only participant contributions count as invested
@@ -1099,7 +1287,11 @@ def create_app(df_position: pd.DataFrame = None,
         cagr_color = COLORS['accent'] if (cagr_pct or 0) >= 0 else '#ef4444'
         return_color = COLORS['accent'] if total_return >= 0 else '#ef4444'
 
+        # Format position label with end date
+        position_label = f"Posição em {period_end.strftime('%b %Y')}"
+
         return (
+            position_label,
             position_text,
             invested_text,
             cagr_text,
@@ -1120,13 +1312,19 @@ def create_app(df_position: pd.DataFrame = None,
         Input('benchmark-select', 'value'),
         Input('overhead-select', 'value'),
         Input('company-as-mine-toggle', 'value'),
-        State('position-data', 'data'),
-        State('contributions-data', 'data'),
+        Input('position-data', 'data'),
+        Input('contributions-data', 'data'),
+        State('inflation-toggle', 'value'),
+        State('inflation-index-select', 'value'),
+        State('inflation-reference-month', 'value'),
+        State('contributions-data-original', 'data'),
         State('date-range-data', 'data'),
         State('benchmark-cache', 'data')
     )
     def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
-                              company_as_mine, position_data, contributions_data, date_range, cache):
+                              company_as_mine, position_data, contributions_data,
+                              inflation_toggle, inflation_index, inflation_ref_month,
+                              contributions_original, date_range, cache):
         # Guard for empty data
         if not position_data or not contributions_data:
             empty_fig = create_empty_figure("Carregue um PDF para visualizar")
@@ -1139,10 +1337,31 @@ def create_app(df_position: pd.DataFrame = None,
         df_contrib = pd.DataFrame(contributions_data)
         df_contrib['data'] = pd.to_datetime(df_contrib['data'])
 
+        # Also prepare original contributions for benchmark simulation
+        # (simulation should use nominal contributions, then deflate result)
+        df_contrib_orig = pd.DataFrame(contributions_original) if contributions_original else df_contrib.copy()
+        df_contrib_orig['data'] = pd.to_datetime(df_contrib_orig['data'])
+
         # Filter data using helper function
         df_pos_filtered, df_contrib_filtered, position_before_start, date_before_start = filter_data_by_range(
             df, df_contrib, start_date, end_date
         )
+        # Also filter original contributions for simulation
+        _, df_contrib_orig_filtered, _, _ = filter_data_by_range(
+            df, df_contrib_orig, start_date, end_date
+        )
+
+        # Check if inflation adjustment is ON
+        is_inflation_on = 'adjust' in (inflation_toggle or [])
+        inflation_data = None
+        if is_inflation_on and date_range and inflation_index and inflation_ref_month:
+            # Fetch inflation index for deflating benchmark simulation
+            # Use extended_start (same as apply_inflation_adjustment) for consistency
+            # This ensures all deflation uses the same data/normalization
+            extended_start = (pd.Timestamp(date_range['start']) - pd.DateOffset(months=1)).replace(day=1)
+            inflation_data = fetch_single_benchmark(
+                inflation_index, extended_start.strftime('%Y-%m-%d'), date_range['end']
+            )
 
         benchmark_sim = None
         benchmark_label = None
@@ -1150,7 +1369,7 @@ def create_app(df_position: pd.DataFrame = None,
         benchmark_cagr_style = {'color': COLORS['text_muted'], 'margin': '0.5rem 0'}
         benchmark_label_text = 'Selecione um benchmark'
 
-        if benchmark_name and benchmark_name != 'none' and not df_contrib_filtered.empty and not df_pos_filtered.empty:
+        if benchmark_name and benchmark_name != 'none' and not df_contrib_orig_filtered.empty and not df_pos_filtered.empty:
             # Check cache first
             cache_key = benchmark_name
             if cache_key in cache:
@@ -1175,15 +1394,15 @@ def create_app(df_position: pd.DataFrame = None,
                 else:
                     benchmark_label = benchmark_name
 
-                # Simulate benchmark using filtered contributions and position dates
+                # Simulate benchmark using ORIGINAL (nominal) contributions
                 # Use same contribution type as Nucleos based on toggle
                 treat_company_as_mine = 'as_mine' in (company_as_mine or [])
-                if treat_company_as_mine and 'contrib_participante' in df_contrib_filtered.columns:
-                    contrib_amounts = df_contrib_filtered['contrib_participante']
+                if treat_company_as_mine and 'contrib_participante' in df_contrib_orig_filtered.columns:
+                    contrib_amounts = df_contrib_orig_filtered['contrib_participante']
                 else:
-                    contrib_amounts = df_contrib_filtered['contribuicao_total']
+                    contrib_amounts = df_contrib_orig_filtered['contribuicao_total']
 
-                df_contrib_sim = df_contrib_filtered[['data']].copy()
+                df_contrib_sim = df_contrib_orig_filtered[['data']].copy()
                 df_contrib_sim['contribuicao_total'] = contrib_amounts
 
                 # Filter position dates to start from first contribution month
@@ -1204,6 +1423,13 @@ def create_app(df_position: pd.DataFrame = None,
                     position_dates_for_bench
                 )
 
+                # If inflation is ON, deflate the simulated benchmark position
+                if is_inflation_on and inflation_data is not None and not benchmark_sim.empty:
+                    from calculator import deflate_series
+                    benchmark_sim = deflate_series(benchmark_sim, inflation_data, inflation_ref_month, 'posicao')
+                    benchmark_sim['posicao'] = benchmark_sim['posicao_real']
+                    benchmark_sim = benchmark_sim.drop(columns=['posicao_real'])
+
                 # Calculate benchmark value and CAGR
                 if not benchmark_sim.empty:
                     # What this period's contributions became under the benchmark
@@ -1215,9 +1441,15 @@ def create_app(df_position: pd.DataFrame = None,
                     from calculator import xirr_bizdays
                     last_date = df_pos_filtered['data'].iloc[-1]
 
-                    # XIRR: contributions → what they became under benchmark
+                    # XIRR: use deflated contributions (from df_contrib_filtered) for consistency
+                    # This gives the "real" return rate
+                    if treat_company_as_mine and 'contrib_participante' in df_contrib_filtered.columns:
+                        contrib_for_cagr = df_contrib_filtered['contrib_participante']
+                    else:
+                        contrib_for_cagr = df_contrib_filtered['contribuicao_total']
+
                     dates = df_contrib_filtered['data'].tolist() + [last_date]
-                    amounts = [-amt for amt in contrib_amounts.tolist()] + [benchmark_final_value]
+                    amounts = [-amt for amt in contrib_for_cagr.tolist()] + [benchmark_final_value]
                     bench_cagr = xirr_bizdays(dates, amounts)
 
                     if bench_cagr is not None:
@@ -1245,8 +1477,8 @@ def create_app(df_position: pd.DataFrame = None,
         Input('company-as-mine-toggle', 'value'),
         Input('start-month', 'value'),
         Input('end-month', 'value'),
-        State('contributions-monthly-data', 'data'),
-        State('position-data', 'data')
+        Input('contributions-monthly-data', 'data'),
+        Input('position-data', 'data')
     )
     def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data, position_data):
         # Guard for empty data
@@ -1276,6 +1508,9 @@ def create_app(df_position: pd.DataFrame = None,
         Output('position-data', 'data'),
         Output('contributions-data', 'data'),
         Output('contributions-monthly-data', 'data'),
+        Output('position-data-original', 'data'),
+        Output('contributions-data-original', 'data'),
+        Output('contributions-monthly-data-original', 'data'),
         Output('date-range-data', 'data'),
         Output('stats-data', 'data'),
         Output('month-options', 'data'),
@@ -1325,10 +1560,17 @@ def create_app(df_position: pd.DataFrame = None,
         # Note: end-month options/value will be set by update_end_month_options callback
         # which is triggered when start-month.value changes
 
+        position_data = df_position.to_dict('records')
+        contributions_data = df_contributions_raw.to_dict('records')
+        contributions_monthly_data = df_contributions_monthly.to_dict('records')
+
         return (
-            df_position.to_dict('records'),
-            df_contributions_raw.to_dict('records'),
-            df_contributions_monthly.to_dict('records'),
+            position_data,              # display
+            contributions_data,         # display
+            contributions_monthly_data, # display
+            position_data,              # original (same on upload)
+            contributions_data,         # original
+            contributions_monthly_data, # original
             {'start': start_date_str, 'end': end_date_str},
             stats,
             month_options,
@@ -1366,13 +1608,18 @@ def create_app(df_position: pd.DataFrame = None,
         Input('benchmark-select', 'value'),
         Input('overhead-select', 'value'),
         Input('company-as-mine-toggle', 'value'),
-        State('position-data', 'data'),
-        State('contributions-data', 'data'),
+        Input('position-data', 'data'),
+        Input('contributions-data', 'data'),
+        State('inflation-toggle', 'value'),
+        State('inflation-index-select', 'value'),
+        State('inflation-reference-month', 'value'),
         State('date-range-data', 'data'),
         State('benchmark-cache', 'data')
     )
     def update_position_table(start_date, end_date, benchmark_name, overhead,
-                              company_as_mine, position_data, contributions_data, date_range, cache):
+                              company_as_mine, position_data, contributions_data,
+                              inflation_toggle, inflation_index, inflation_ref_month,
+                              date_range, cache):
         """Populate position data table with Nucleos and benchmark values."""
         if not position_data or not contributions_data:
             return [], []
@@ -1391,19 +1638,67 @@ def create_app(df_position: pd.DataFrame = None,
         if df_pos_filtered.empty:
             return [], []
 
+        # Check if inflation adjustment is ON
+        is_inflation_on = 'adjust' in (inflation_toggle or [])
+
+        # Build deflator lookup dict if inflation is ON
+        # Fetch from same range as benchmark (date_range['start']), not extended
+        # This ensures normalization matches the benchmark index
+        deflator_dict = {}
+        if is_inflation_on and date_range and inflation_index:
+            deflator_data = fetch_single_benchmark(
+                inflation_index, date_range['start'], date_range['end']
+            )
+            if deflator_data is not None:
+                deflator_data['date'] = pd.to_datetime(deflator_data['date'])
+                deflator_dict = {row['date'].strftime('%b %Y'): row['value']
+                                for _, row in deflator_data.iterrows()}
+
+        # Calculate cumulative contributions up to each position date
+        treat_company_as_mine = 'as_mine' in (company_as_mine or [])
+        df_contrib_sorted = df_contrib_filtered.sort_values('data')
+
         # Build table data
         table_data = []
         for _, row in df_pos_filtered.iterrows():
-            table_data.append({
-                'data': row['data'].strftime('%b %Y'),
-                'posicao': f"R$ {row['posicao']:,.2f}"
-            })
+            pos_date = row['data']
+            date_key = pos_date.strftime('%b %Y')
+
+            # Calculate cumulative contributions up to this position date
+            contrib_up_to_date = df_contrib_sorted[df_contrib_sorted['data'] <= pos_date]
+            total_contrib = contrib_up_to_date['contribuicao_total'].sum() if not contrib_up_to_date.empty else 0
+
+            row_data = {
+                'data': date_key,
+                'posicao': f"R$ {row['posicao']:,.2f}",
+                'total_contrib': f"R$ {total_contrib:,.2f}"
+            }
+
+            # Add participant-only column when split is ON
+            if treat_company_as_mine and 'contrib_participante' in df_contrib_sorted.columns:
+                participant_contrib = contrib_up_to_date['contrib_participante'].sum() if not contrib_up_to_date.empty else 0
+                row_data['participant_contrib'] = f"R$ {participant_contrib:,.2f}"
+
+            # Add deflator column if inflation is ON
+            if is_inflation_on and deflator_dict:
+                if date_key in deflator_dict:
+                    row_data['deflator'] = f"{deflator_dict[date_key]:.6f}"
+                else:
+                    row_data['deflator'] = '-'
+            table_data.append(row_data)
 
         # Base columns
         columns = [
             {'name': 'Data', 'id': 'data'},
             {'name': 'Posição (Nucleos)', 'id': 'posicao'},
+            {'name': 'Contrib. Total', 'id': 'total_contrib'},
         ]
+        # Add participant-only column when split is ON
+        if treat_company_as_mine and 'contrib_participante' in df_contrib_sorted.columns:
+            columns.append({'name': 'Contrib. Participante', 'id': 'participant_contrib'})
+        # Add deflator column if inflation is ON
+        if is_inflation_on and deflator_dict:
+            columns.append({'name': f'Deflator ({inflation_index})', 'id': 'deflator'})
 
         # Add benchmark columns if benchmark selected
         if benchmark_name and benchmark_name != 'none' and not df_contrib_filtered.empty and date_range:
@@ -1524,17 +1819,26 @@ def create_app(df_position: pd.DataFrame = None,
         Input('start-month', 'value'),
         Input('end-month', 'value'),
         Input('company-as-mine-toggle', 'value'),
-        State('contributions-monthly-data', 'data'),
-        State('position-data', 'data')
+        Input('contributions-monthly-data', 'data'),
+        Input('position-data', 'data'),
+        State('inflation-toggle', 'value'),
+        State('inflation-index-select', 'value'),
+        State('inflation-reference-month', 'value'),
+        State('date-range-data', 'data'),
     )
     def update_contributions_table(start_date, end_date, company_as_mine,
-                                   monthly_data, position_data):
+                                   monthly_data, position_data,
+                                   inflation_toggle, inflation_index, inflation_ref_month,
+                                   date_range):
         """Populate contributions data table."""
         if not monthly_data:
             return [], []
 
         df_monthly = pd.DataFrame(monthly_data)
         df_monthly['data'] = pd.to_datetime(df_monthly['data'])
+
+        # Check if inflation adjustment is ON
+        is_inflation_on = 'adjust' in (inflation_toggle or [])
 
         if position_data:
             df_pos = pd.DataFrame(position_data)
@@ -1558,20 +1862,36 @@ def create_app(df_position: pd.DataFrame = None,
         show_split = 'as_mine' in (company_as_mine or [])
         if show_split:
             df_monthly['total_investido'] = df_monthly['contrib_participante'].cumsum()
+            df_monthly['contrib_total_acum'] = df_monthly['contribuicao_total'].cumsum()
         else:
             df_monthly['total_investido'] = df_monthly['contribuicao_total'].cumsum()
+
+        # Build deflator lookup dict if inflation is ON
+        # Fetch from same range as benchmark (date_range['start']), not extended
+        # This ensures normalization matches the benchmark index
+        deflator_dict = {}
+        if is_inflation_on and date_range and inflation_index:
+            deflator_data = fetch_single_benchmark(
+                inflation_index, date_range['start'], date_range['end']
+            )
+            if deflator_data is not None:
+                deflator_data['date'] = pd.to_datetime(deflator_data['date'])
+                deflator_dict = {row['date'].strftime('%b %Y'): row['value']
+                                for _, row in deflator_data.iterrows()}
 
         # Build table data
         table_data = []
         for _, row in df_monthly.iterrows():
+            date_key = row['data'].strftime('%b %Y')
             row_data = {
-                'data': row['data'].strftime('%b %Y'),
+                'data': date_key,
                 'contrib_total': f"R$ {row['contribuicao_total']:,.2f}",
                 'total_investido': f"R$ {row['total_investido']:,.2f}",
             }
             if show_split:
                 row_data['contrib_participante'] = f"R$ {row['contrib_participante']:,.2f}"
                 row_data['contrib_patrocinador'] = f"R$ {row['contrib_patrocinador']:,.2f}"
+                row_data['contrib_total_acum'] = f"R$ {row['contrib_total_acum']:,.2f}"
 
             # Add position if available
             if not df_pos.empty:
@@ -1580,6 +1900,12 @@ def create_app(df_position: pd.DataFrame = None,
                     row_data['posicao'] = f"R$ {pos_row['posicao'].iloc[0]:,.2f}"
                 else:
                     row_data['posicao'] = '-'
+            # Add deflator column if inflation is ON
+            if is_inflation_on and deflator_dict:
+                if date_key in deflator_dict:
+                    row_data['deflator'] = f"{deflator_dict[date_key]:.6f}"
+                else:
+                    row_data['deflator'] = '-'
             table_data.append(row_data)
 
         # Build columns dynamically
@@ -1589,8 +1915,13 @@ def create_app(df_position: pd.DataFrame = None,
             columns.append({'name': 'Contrib. Patrocinador', 'id': 'contrib_patrocinador'})
         columns.append({'name': 'Contrib. Total', 'id': 'contrib_total'})
         columns.append({'name': 'Total Investido', 'id': 'total_investido'})
+        if show_split:
+            columns.append({'name': 'Contrib. Total Acum.', 'id': 'contrib_total_acum'})
         if not df_pos.empty:
             columns.append({'name': 'Posição', 'id': 'posicao'})
+        # Add deflator column if inflation is ON
+        if is_inflation_on and deflator_dict:
+            columns.append({'name': f'Deflator ({inflation_index})', 'id': 'deflator'})
 
         return table_data, columns
 

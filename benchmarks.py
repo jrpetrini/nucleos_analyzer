@@ -346,6 +346,9 @@ def apply_overhead_to_benchmark(benchmark_data: pd.DataFrame, annual_overhead_pc
     For example, if the benchmark is INPC and overhead is 4%,
     this simulates investing in "INPC + 4% a.a."
 
+    Uses 252 business days per year (Brazilian ANBIMA calendar) to match
+    the XIRR calculation convention.
+
     Args:
         benchmark_data: DataFrame with 'date' and 'value' columns
         annual_overhead_pct: Annual overhead in percentage (e.g., 4 for 4%)
@@ -356,17 +359,20 @@ def apply_overhead_to_benchmark(benchmark_data: pd.DataFrame, annual_overhead_pc
     if annual_overhead_pct == 0:
         return benchmark_data.copy()
 
+    from bizdays import Calendar
+    cal = Calendar.load('ANBIMA')
+
     df = benchmark_data.copy()
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date').reset_index(drop=True)
 
-    # Calculate days between each point and first date
-    first_date = df['date'].iloc[0]
-    df['days'] = (df['date'] - first_date).dt.days
+    # Calculate business days between each point and first date
+    first_date = df['date'].iloc[0].date()
+    df['biz_days'] = df['date'].apply(lambda d: cal.bizdays(first_date, d.date()))
 
-    # Apply compound overhead: value * (1 + overhead)^(days/365)
+    # Apply compound overhead: value * (1 + overhead)^(biz_days/252)
     annual_factor = 1 + (annual_overhead_pct / 100)
-    df['value'] = df['value'] * (annual_factor ** (df['days'] / 365))
+    df['value'] = df['value'] * (annual_factor ** (df['biz_days'] / 252))
 
     return df[['date', 'value']]
 
