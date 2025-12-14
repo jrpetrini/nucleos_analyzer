@@ -15,6 +15,21 @@ from benchmarks import (
     AVAILABLE_BENCHMARKS, fetch_single_benchmark, apply_overhead_to_benchmark,
     simulate_benchmark
 )
+from dashboard_helpers import (
+    prepare_dataframe,
+    is_inflation_enabled,
+    is_company_as_mine,
+    get_contribution_column,
+    prepare_benchmark_contributions,
+    build_deflator_dict,
+    format_currency,
+)
+from business_logic import (
+    filter_data_by_range,
+    calculate_time_weighted_position,
+    calculate_nucleos_stats,
+    simulate_and_calculate_benchmark,
+)
 
 # Color palette
 COLORS = {
@@ -66,123 +81,6 @@ HELP_TEXTS = {
     'contributions_table': 'Tabela com contribuições mensais, total investido acumulado e posição. Quando o toggle "empresa como sem custo" está ativo, mostra a divisão participante/patrocinador.',
     'inflation_adjustment': 'Ajusta valores para mostrar retornos reais. IPCA: inflação oficial. INPC: inflação para salários. Valores são ajustados para o mês de referência.',
 }
-
-
-def filter_data_by_range(df_pos: pd.DataFrame, df_contrib: pd.DataFrame,
-                          start_date: str, end_date: str) -> tuple:
-    """
-    Filter position and contribution data to the selected date range.
-    Adjusts position values to be relative to the position before the start date.
-
-    Returns:
-        tuple: (df_pos_filtered, df_contrib_filtered, position_before_start, date_before_start)
-               date_before_start is None if there's no previous month (first month selected)
-    """
-    df_pos = df_pos.copy()
-    df_contrib = df_contrib.copy()
-
-    # Convert dates
-    start_dt = pd.to_datetime(start_date) if start_date else None
-    end_dt = pd.to_datetime(end_date) if end_date else None
-
-    # Filter by date range
-    if start_dt and end_dt:
-        df_pos_filtered = df_pos[(df_pos['data'] >= start_dt) & (df_pos['data'] <= end_dt)].copy()
-        # Filter contributions by month to include all contributions in start month
-        df_contrib_filtered = df_contrib[
-            (df_contrib['data'].dt.to_period('M') >= start_dt.to_period('M')) &
-            (df_contrib['data'].dt.to_period('M') <= end_dt.to_period('M'))
-        ].copy()
-    else:
-        df_pos_filtered = df_pos.copy()
-        df_contrib_filtered = df_contrib.copy()
-
-    # Find position BEFORE the start date (and its actual date for XIRR)
-    position_before_start = 0
-    date_before_start = None
-    if not df_pos_filtered.empty:
-        selected_start = df_pos_filtered['data'].iloc[0]
-        df_before = df_pos[df_pos['data'] < selected_start]
-        if len(df_before) > 0:
-            position_before_start = df_before['posicao'].iloc[-1]
-            date_before_start = df_before['data'].iloc[-1]
-
-    # Adjust position values to be relative to start
-    if not df_pos_filtered.empty:
-        df_pos_filtered['posicao'] = df_pos_filtered['posicao'] - position_before_start
-
-    return df_pos_filtered, df_contrib_filtered, position_before_start, date_before_start
-
-
-def calculate_time_weighted_position(df_contrib: pd.DataFrame,
-                                      start_position: float,
-                                      end_position: float,
-                                      period_start: pd.Timestamp,
-                                      period_end: pd.Timestamp,
-                                      contribution_col: str = 'contribuicao_total') -> tuple:
-    """
-    Calculate time-weighted return rate and position for contributions in a period.
-
-    Uses the formula:
-    r = (End - Start - ΣContributions) / (Start + Σ(Contribution_i × fraction_i))
-
-    Where fraction_i = days remaining in period / total days in period
-
-    Args:
-        df_contrib: DataFrame with contributions (must have 'data' and contribution_col columns)
-        start_position: Position at start of period (0 if first period)
-        end_position: Position at end of period
-        period_start: Start date of period
-        period_end: End date of period
-        contribution_col: Column name for contribution amounts
-
-    Returns:
-        tuple: (return_rate, contributions_with_returns)
-               contributions_with_returns = sum of (contribution × (1 + r × fraction))
-    """
-    if df_contrib.empty:
-        # No contributions in period
-        if start_position > 0:
-            return_rate = (end_position / start_position) - 1
-            return return_rate, 0.0
-        else:
-            return 0.0, 0.0
-
-    total_days = (period_end - period_start).days
-    if total_days <= 0:
-        total_days = 1  # Avoid division by zero for same-day
-
-    # Calculate fraction for each contribution (days remaining / total days)
-    contributions = df_contrib[contribution_col].values
-    dates = pd.to_datetime(df_contrib['data'])
-
-    fractions = []
-    for date in dates:
-        days_remaining = (period_end - date).days
-        fraction = max(0, min(1, days_remaining / total_days))
-        fractions.append(fraction)
-
-    fractions = pd.Series(fractions)
-
-    # Calculate weighted sum for denominator
-    weighted_contrib_sum = (contributions * fractions).sum()
-    total_contributions = contributions.sum()
-
-    # r = (End - Start - ΣContributions) / (Start + Σ(Contribution_i × fraction_i))
-    denominator = start_position + weighted_contrib_sum
-    if denominator <= 0:
-        # Edge case: no starting position and no time-weighted contributions
-        return 0.0, total_contributions
-
-    numerator = end_position - start_position - total_contributions
-    return_rate = numerator / denominator
-
-    # Calculate what each contribution is worth at period end
-    # contribution_value = contribution × (1 + r × fraction)
-    contribution_values = contributions * (1 + return_rate * fractions)
-    contributions_with_returns = contribution_values.sum()
-
-    return return_rate, contributions_with_returns
 
 
 def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
@@ -1215,89 +1113,23 @@ def create_app(df_position: pd.DataFrame = None,
             return ('Posição', 'R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
                     'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
 
-        df_contrib = pd.DataFrame(contributions_data)
-        df_contrib['data'] = pd.to_datetime(df_contrib['data'])
-        df_pos = pd.DataFrame(position_data)
-        df_pos['data'] = pd.to_datetime(df_pos['data'])
+        df_contrib = prepare_dataframe(contributions_data)
+        df_pos = prepare_dataframe(position_data)
 
-        # Filter data using helper function
-        df_pos_filtered, df_contrib_filtered, position_before_start, date_before_start = filter_data_by_range(
-            df_pos, df_contrib, start_date, end_date
+        # Use extracted business logic
+        stats = calculate_nucleos_stats(
+            df_contrib, df_pos, start_date, end_date,
+            is_company_as_mine(company_as_mine), COLORS
         )
-
-        if df_pos_filtered.empty:
-            return ('Posição', 'R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
-                    'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
-
-        # Toggle ON = company as mine = only participant contributions count as invested
-        treat_company_as_mine = 'as_mine' in (company_as_mine or [])
-
-        # Determine which contribution column to use
-        if treat_company_as_mine and 'contrib_participante' in df_contrib_filtered.columns:
-            contrib_col = 'contrib_participante'
-        else:
-            contrib_col = 'contribuicao_total'
-
-        # Calculate total invested within date range
-        total_invested_in_range = df_contrib_filtered[contrib_col].sum() if not df_contrib_filtered.empty else 0
-
-        # Get period boundaries for time-weighted calculation
-        period_start = date_before_start if date_before_start is not None else df_pos_filtered['data'].iloc[0]
-        period_end = df_pos_filtered['data'].iloc[-1]
-        end_position_original = df_pos_filtered['posicao'].iloc[-1] + position_before_start
-
-        # Calculate time-weighted position for this period's contributions
-        _, position_from_contributions = calculate_time_weighted_position(
-            df_contrib_filtered,
-            start_position=position_before_start,
-            end_position=end_position_original,
-            period_start=period_start,
-            period_end=period_end,
-            contribution_col=contrib_col
-        )
-
-        # Position shows only what this period's contributions became (with their returns)
-        position_display = position_from_contributions
-
-        # Total return = position from contributions minus what was invested
-        total_return = position_from_contributions - total_invested_in_range
-
-        # Calculate XIRR for the selected period
-        # XIRR is calculated on this period's contributions only (matching the position display)
-        from calculator import xirr_bizdays
-
-        amounts_for_xirr = df_contrib_filtered[contrib_col].tolist() if not df_contrib_filtered.empty else []
-
-        # Build cash flows: contributions (outflows) + what they became (inflow)
-        contrib_dates = df_contrib_filtered['data'].tolist() if not df_contrib_filtered.empty else []
-        contrib_amounts = [-amt for amt in amounts_for_xirr]
-
-        # Use position_from_contributions as the final value (what contributions became)
-        dates = contrib_dates + [period_end]
-        amounts = contrib_amounts + [position_from_contributions]
-
-        cagr = xirr_bizdays(dates, amounts)
-        cagr_pct = cagr * 100 if cagr is not None else None
-
-        position_text = f'R$ {position_display:,.2f}'
-        invested_text = f'R$ {total_invested_in_range:,.2f}'
-        cagr_text = f'{cagr_pct:+.2f}% a.a.' if cagr_pct is not None else 'N/A'
-        return_text = f'R$ {total_return:,.2f} total'
-
-        cagr_color = COLORS['accent'] if (cagr_pct or 0) >= 0 else '#ef4444'
-        return_color = COLORS['accent'] if total_return >= 0 else '#ef4444'
-
-        # Format position label with end date
-        position_label = f"Posição em {period_end.strftime('%b %Y')}"
 
         return (
-            position_label,
-            position_text,
-            invested_text,
-            cagr_text,
-            {'color': cagr_color, 'margin': '0.5rem 0'},
-            return_text,
-            {'color': return_color, 'margin': '0', 'fontSize': '0.875rem'}
+            stats['position_label'],
+            stats['position_value'],
+            stats['invested_value'],
+            stats['cagr_text'],
+            stats['cagr_style'],
+            stats['return_text'],
+            stats['return_style']
         )
 
     @callback(
@@ -1485,23 +1317,16 @@ def create_app(df_position: pd.DataFrame = None,
         if not monthly_data or not position_data:
             return create_empty_figure("Carregue um PDF para visualizar")
 
-        df_monthly = pd.DataFrame(monthly_data)
-        df_monthly['data'] = pd.to_datetime(df_monthly['data'])
+        df_monthly = prepare_dataframe(monthly_data)
+        df_pos = prepare_dataframe(position_data)
 
-        df_pos = pd.DataFrame(position_data)
-        df_pos['data'] = pd.to_datetime(df_pos['data'])
-
-        # Filter data using helper function
         df_pos_filtered, df_monthly_filtered, _, _ = filter_data_by_range(
             df_pos, df_monthly, start_date, end_date
         )
 
-        # Show split when toggle is ON (company as mine = show what's yours vs theirs)
-        treat_company_as_mine = 'as_mine' in (company_as_mine or [])
-        show_split = treat_company_as_mine
-
         return create_contributions_figure(
-            df_monthly_filtered, df_position=df_pos_filtered, show_split=show_split
+            df_monthly_filtered, df_position=df_pos_filtered,
+            show_split=is_company_as_mine(company_as_mine)
         )
 
     @callback(

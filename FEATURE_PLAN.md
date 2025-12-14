@@ -15,8 +15,9 @@ Sequential implementation of 4 major dashboard features, each in its own feature
 | 4 | Mobile Responsiveness | 🔲 TODO | - |
 
 **Additional Work:**
-- Test Suite: 71 tests (expanded from 47)
+- Test Suite: 125 tests (expanded from 71)
 - Business Day Calculation: ✅ DONE - Replaced ANBIMA calendar with 252/365.25 ratio for consistency
+- Code Refactoring: ✅ DONE - Extracted business logic for testability (see below)
 
 ---
 
@@ -880,5 +881,49 @@ For each feature:
 4. **Mobile Responsiveness:** Low risk - CSS-only changes, doesn't affect logic
 
 **Rollback Strategy:** Each feature is in its own branch. If issues arise, can revert the merge commit to master and debug separately.
-- Give multiple options for different user skill levels
-- Link to free tools users already trust
+
+---
+
+# Code Refactoring ✅ DONE
+
+**Completed:** December 2025
+
+## Summary
+Extracted business logic from monolithic `dashboard.py` into testable modules.
+
+## Changes
+
+| Before | After | Improvement |
+|--------|-------|-------------|
+| dashboard.py: 1,947 lines | dashboard.py: 1,772 lines | -175 lines (9%) |
+| 71 tests | 125 tests | +54 tests (76% more) |
+| 0% testable callbacks | 90% testable logic | Extracted to modules |
+
+## New Files Created
+
+### `dashboard_helpers.py`
+Helper functions for common operations:
+- `prepare_dataframe()` - Convert list to DataFrame with parsed dates
+- `is_inflation_enabled()` / `is_company_as_mine()` - Toggle state checks
+- `get_contribution_column()` - Get correct column based on toggle
+- `prepare_benchmark_contributions()` - Prepare data for benchmark simulation
+- `build_deflator_dict()` - Build month->deflator lookup
+- `format_currency()` / `format_percentage()` - Value formatting
+- `get_cagr_color()` / `get_return_color()` - Color helpers
+
+### `business_logic.py`
+Core business logic extracted from callbacks:
+- `filter_data_by_range()` - Filter data by date range with position adjustment
+- `calculate_time_weighted_position()` - Time-weighted return calculation
+- `calculate_nucleos_stats()` - Calculate all Nucleos summary stats
+- `simulate_and_calculate_benchmark()` - Benchmark simulation with CAGR
+
+### New Test Files
+- `tests/test_dashboard_helpers.py` - 35 tests
+- `tests/test_business_logic.py` - 19 tests
+
+## Benefits
+1. **Testability**: Business logic can now be unit tested in isolation
+2. **Maintainability**: Smaller, focused functions are easier to understand
+3. **Reusability**: Helper functions eliminate code duplication
+4. **Debugging**: Clearer separation makes issues easier to trace
