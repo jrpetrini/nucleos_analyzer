@@ -168,7 +168,7 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             y=benchmark_sim['posicao'],
             mode='lines+markers',
             name=benchmark_label,
-            line=dict(color=color, width=2, dash='dash'),
+            line=dict(color=color, width=2),
             marker=dict(size=5, color=color),
             hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{benchmark_label}: R$ %{{y:,.2f}}<extra></extra>'
         ))
