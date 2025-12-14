@@ -7,9 +7,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-import sys
-sys.path.insert(0, '/home/petrini/Documents/nucleos_analyzer')
-
 from calculator import (
     xirr_bizdays,
     process_position_data,
@@ -21,19 +18,23 @@ from calculator import (
 
 
 class TestXirrBizdays:
-    """Tests for the xirr_bizdays function."""
+    """Tests for the xirr_bizdays function.
+
+    All expected values calculated using 252/365.25 business day ratio.
+    Period: Jan 2 2020 to Jan 4 2021 = 368 calendar days ≈ 253.8 business days.
+    """
 
     def test_simple_return(self):
         """Test XIRR with simple investment and return."""
-        # Invest 1000, get back 1100 after ~1 year (252 business days)
+        # Invest 1000, get back 1100 after ~1 year
         dates = [datetime(2020, 1, 2), datetime(2021, 1, 4)]
         amounts = [-1000, 1100]
 
         rate = xirr_bizdays(dates, amounts)
 
+        # Exact: 0.099217 (9.9217% annual return)
         assert rate is not None
-        # Should be approximately 10% annual return
-        assert 0.09 < rate < 0.11
+        assert abs(rate - 0.099217) < 0.0001
 
     def test_zero_return(self):
         """Test XIRR with zero return (get back exactly what you put in)."""
@@ -42,8 +43,9 @@ class TestXirrBizdays:
 
         rate = xirr_bizdays(dates, amounts)
 
+        # Exact: 0.0
         assert rate is not None
-        assert abs(rate) < 0.01  # Should be close to 0%
+        assert abs(rate) < 1e-9
 
     def test_negative_return(self):
         """Test XIRR with negative return (loss)."""
@@ -52,8 +54,9 @@ class TestXirrBizdays:
 
         rate = xirr_bizdays(dates, amounts)
 
+        # Exact: -0.099291 (-9.9291% annual return)
         assert rate is not None
-        assert -0.15 < rate < -0.05  # Should be negative
+        assert abs(rate - (-0.099291)) < 0.0001
 
     def test_multiple_contributions(self):
         """Test XIRR with multiple contributions over time."""
@@ -89,6 +92,28 @@ class TestXirrBizdays:
         rate = xirr_bizdays(dates, amounts)
 
         assert rate is None
+
+    def test_extreme_loss(self):
+        """Test XIRR handles extreme loss scenarios (95% loss)."""
+        dates = [datetime(2020, 1, 2), datetime(2021, 1, 4)]
+        amounts = [-1000, 50]
+
+        rate = xirr_bizdays(dates, amounts)
+
+        # Exact: -0.948868 (-94.8868% annual return)
+        assert rate is not None
+        assert abs(rate - (-0.948868)) < 0.0001
+
+    def test_extreme_gain(self):
+        """Test XIRR handles extreme gain scenarios (400% gain)."""
+        dates = [datetime(2020, 1, 2), datetime(2021, 1, 4)]
+        amounts = [-1000, 5000]
+
+        rate = xirr_bizdays(dates, amounts)
+
+        # Exact: 3.940225 (394.0225% annual return)
+        assert rate is not None
+        assert abs(rate - 3.940225) < 0.0001
 
 
 class TestProcessPositionData:
@@ -215,6 +240,50 @@ class TestDeflateSeries:
             result['posicao'].reset_index(drop=True),
             original_values.reset_index(drop=True)
         )
+
+    def test_deflation_with_no_base_value_returns_original(self, sample_position_data):
+        """Test deflation returns original values when base date is BEFORE inflation data."""
+        # Inflation data starts in 2020
+        inflation_index = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01']),
+            'value': [100.0, 101.0, 102.0]
+        })
+        # Base date is BEFORE inflation data - get_value_on_date returns None
+        base_date = pd.Timestamp('2019-01-01')
+
+        result = deflate_series(
+            sample_position_data,
+            inflation_index,
+            base_date,
+            'posicao'
+        )
+
+        # Should return original values unchanged when base inflation is None
+        assert list(result['posicao_real']) == list(sample_position_data['posicao'])
+
+    def test_deflation_formula_precision(self, sample_position_data, sample_inflation_index):
+        """Test deflation formula: real = nominal * (base_inflation / date_inflation).
+
+        Expected values calculated from fixtures with geometric interpolation.
+        Base date June 30 has interpolated inflation ~1.030196.
+        """
+        base_date = pd.Timestamp('2020-06-30')
+
+        result = deflate_series(
+            sample_position_data,
+            sample_inflation_index,
+            base_date,
+            'posicao'
+        )
+
+        # Exact expected values (calculated from actual interpolation)
+        expected_real = [1035.498680, 2070.918325, 3106.114999,
+                         4141.106353, 5175.725901, 6210.000000]
+
+        for i, expected in enumerate(expected_real):
+            actual = result.iloc[i]['posicao_real']
+            assert abs(actual - expected) < 0.01, \
+                f"Row {i}: expected {expected}, got {actual}"
 
 
 class TestApplyDeflation:

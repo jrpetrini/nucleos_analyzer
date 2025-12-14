@@ -233,7 +233,7 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
     return_color = get_return_color(total_return, colors)
 
     # Format position label with end date
-    position_label = f"Posição em {period_end.strftime('%b %Y')}"
+    position_label = f"Posição em {period_end.strftime('%m/%Y')}"
 
     return {
         'position_label': position_label,

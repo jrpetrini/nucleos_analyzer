@@ -2,6 +2,13 @@
 Shared fixtures for Nucleos Analyzer tests.
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to path so tests can import modules
+# This makes the tests portable (works regardless of where the repo is cloned)
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pytest
 import pandas as pd
 from datetime import datetime

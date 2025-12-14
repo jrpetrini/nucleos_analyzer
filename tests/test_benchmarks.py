@@ -6,9 +6,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime
-
-import sys
-sys.path.insert(0, '/home/petrini/Documents/nucleos_analyzer')
+from pathlib import Path
 
 from benchmarks import (
     get_value_on_date,
@@ -337,12 +335,10 @@ class TestRealDataIntegration:
     @pytest.fixture
     def real_2024_data(self):
         """Load real 2024 PDF data."""
-        import sys
-        sys.path.insert(0, '/home/petrini/Documents/nucleos_analyzer')
         from extractor import extract_data_from_pdf
 
-        pdf_path = '/home/petrini/Documents/nucleos_analyzer/tests/fixtures/sample_extrato_2024.pdf'
-        df_raw, df_contributions = extract_data_from_pdf(pdf_path)
+        pdf_path = Path(__file__).parent / 'fixtures' / 'sample_extrato_2024.pdf'
+        df_raw, df_contributions = extract_data_from_pdf(str(pdf_path))
         return df_raw, df_contributions
 
     @pytest.fixture
@@ -508,13 +504,11 @@ class TestComponentConsistency:
     @pytest.fixture
     def real_data_full(self):
         """Load real 2024 PDF data with all processing."""
-        import sys
-        sys.path.insert(0, '/home/petrini/Documents/nucleos_analyzer')
         from extractor import extract_data_from_pdf
         from calculator import process_position_data, process_contributions_data
 
-        pdf_path = '/home/petrini/Documents/nucleos_analyzer/tests/fixtures/sample_extrato_2024.pdf'
-        df_raw, df_contributions = extract_data_from_pdf(pdf_path)
+        pdf_path = Path(__file__).parent / 'fixtures' / 'sample_extrato_2024.pdf'
+        df_raw, df_contributions = extract_data_from_pdf(str(pdf_path))
         df_position = process_position_data(df_raw)
         df_contrib_monthly = process_contributions_data(df_contributions)
 

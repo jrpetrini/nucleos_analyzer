@@ -209,6 +209,73 @@ valor_real = valor_nominal × (índice_referência / índice_data)
 
 Isso permite visualizar o poder de compra real dos seus investimentos ao longo do tempo.
 
+<details>
+<summary><strong>🧪 Suite de Testes (183 testes)</strong></summary>
+
+### Executar Testes
+
+```bash
+# Todos os testes
+pytest tests/ -v
+
+# Sem testes de API externa (mais rápido)
+pytest tests/ -m "not external_api"
+
+# Apenas testes de API externa
+pytest tests/ -m external_api
+
+# Com cobertura
+pytest tests/ --cov=. --cov-report=term-missing
+```
+
+### Estrutura dos Testes
+
+| Arquivo | Testes | Descrição |
+|---------|--------|-----------|
+| `test_calculator.py` | 27 | XIRR, deflação, processamento de dados |
+| `test_business_logic.py` | 30 | Lógica de cálculo de estatísticas e benchmarks |
+| `test_benchmarks.py` | 49 | Simulação de benchmarks (CDI, IPCA, INPC, S&P500, USD) |
+| `test_extractor.py` | 12 | Extração de dados do PDF |
+| `test_dashboard_helpers.py` | 12 | Funções auxiliares da UI |
+| `test_data_sources.py` | 13 | Cross-validação BCB vs IPEA APIs |
+| `test_integration.py` | 34 | Testes end-to-end com PDFs reais |
+| `conftest.py` | — | Fixtures compartilhadas |
+
+### Cobertura de Código
+
+| Módulo | Cobertura |
+|--------|-----------|
+| `calculator.py` | 97% |
+| `business_logic.py` | 96% |
+| `extractor.py` | 98% |
+| `benchmarks.py` | 85% |
+| `dashboard_helpers.py` | 100% |
+
+### Testes de APIs Externas
+
+Os testes em `test_data_sources.py` verificam:
+- **BCB vs IPEA**: Dados idênticos entre fontes (IPCA, INPC, CDI)
+- **Fallback automático**: Se BCB falhar, usa IPEA como backup
+- **Disponibilidade**: Testes são SKIP (não FAIL) se API estiver offline
+
+```python
+# Exemplo: Cross-validação BCB vs IPEA
+def test_ipca_bcb_matches_ipea():
+    bcb_data = fetch_bcb_direct(433, '01/01/2024', '31/12/2024')
+    ipea_data = fetch_ipea_direct('PRECOS12_IPCAG12')
+    # Diferença máxima tolerada: 0.001%
+    assert (bcb_data - ipea_data).abs().max() < 0.001
+```
+
+### Princípios dos Testes
+
+1. **Valores exatos**: Testes usam valores calculados precisamente, não aproximações
+2. **Investigar primeiro**: Se um teste falha, investigamos a causa antes de alterar o teste
+3. **PDFs reais**: Testes de integração usam extratos reais (redacionados)
+4. **Fallback resiliente**: Sistema continua funcionando mesmo com APIs instáveis
+
+</details>
+
 ## Contribuir
 
 Código fonte: https://github.com/jrpetrini/nucleos_analyzer

@@ -5,9 +5,6 @@ Tests for dashboard_helpers.py - Helper functions for dashboard callbacks.
 import pytest
 import pandas as pd
 
-import sys
-sys.path.insert(0, '/home/petrini/Documents/nucleos_analyzer')
-
 from dashboard_helpers import (
     prepare_dataframe,
     is_inflation_enabled,

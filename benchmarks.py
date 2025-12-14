@@ -8,6 +8,7 @@ what contributions would be worth if invested in each benchmark.
 
 import pandas as pd
 import yfinance as yf
+import requests
 from bcb import sgs
 from datetime import datetime, timedelta
 from calculator import BIZ_DAY_RATIO
@@ -20,6 +21,15 @@ BCB_SERIES = {
     'INPC': 188,    # INPC monthly
 }
 
+# IPEA Series codes (fallback source - same data as BCB)
+IPEA_SERIES = {
+    'CDI': 'SGS366_CDI366',      # CDI daily rate
+    'IPCA': 'PRECOS12_IPCAG12',  # IPCA monthly variation
+    'INPC': 'PRECOS12_INPCBR12', # INPC monthly variation
+}
+
+IPEA_API_BASE = "http://www.ipeadata.gov.br/api/odata4/Metadados('{code}')/Valores"
+
 # Yahoo Finance tickers
 YFINANCE_TICKERS = {
     'SP500TR': '^SP500TR',   # S&P 500 Total Return
@@ -27,14 +37,50 @@ YFINANCE_TICKERS = {
 }
 
 
-def fetch_bcb_series(series_code: int, start_date: str, end_date: str = None) -> pd.Series:
+def fetch_ipea_series(series_code: str, start_date: str, end_date: str = None) -> pd.Series:
     """
-    Fetch a series from BCB (Banco Central do Brasil).
+    Fetch a series from IPEA (Instituto de Pesquisa Econômica Aplicada).
+
+    Args:
+        series_code: IPEA series code (e.g., 'PRECOS12_IPCAG12')
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD), defaults to today
+
+    Returns:
+        pandas Series with the data, indexed by date
+    """
+    url = IPEA_API_BASE.format(code=series_code)
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+
+    data = resp.json()['value']
+    df = pd.DataFrame(data)
+    df['date'] = pd.to_datetime(df['VALDATA'], utc=True).dt.tz_localize(None)
+    df['value'] = df['VALVALOR'].astype(float)
+    df = df.set_index('date')['value'].sort_index()
+
+    # Filter by date range
+    start_dt = pd.to_datetime(start_date)
+    if end_date is None:
+        end_date = datetime.now().strftime('%Y-%m-%d')
+    end_dt = pd.to_datetime(end_date)
+
+    return df[(df.index >= start_dt) & (df.index <= end_dt)]
+
+
+def fetch_bcb_series(series_code: int, start_date: str, end_date: str = None,
+                     series_name: str = None) -> pd.Series:
+    """
+    Fetch a series from BCB (Banco Central do Brasil), with IPEA fallback.
+
+    Tries BCB first. If BCB fails, falls back to IPEA if series_name is provided
+    and a matching IPEA series exists.
 
     Args:
         series_code: BCB SGS series code
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD), defaults to today
+        series_name: Series name for IPEA fallback (e.g., 'IPCA', 'CDI', 'INPC')
 
     Returns:
         pandas Series with the data
@@ -42,18 +88,32 @@ def fetch_bcb_series(series_code: int, start_date: str, end_date: str = None) ->
     if end_date is None:
         end_date = datetime.now().strftime('%Y-%m-%d')
 
-    data = sgs.get({'series': series_code}, start=start_date, end=end_date)
-    return data['series']
+    # Try BCB first
+    try:
+        data = sgs.get({'series': series_code}, start=start_date, end=end_date)
+        return data['series']
+    except Exception as bcb_error:
+        # If series_name provided and IPEA has it, try fallback
+        if series_name and series_name in IPEA_SERIES:
+            try:
+                return fetch_ipea_series(IPEA_SERIES[series_name], start_date, end_date)
+            except Exception as ipea_error:
+                # Both failed, raise original BCB error with context
+                raise RuntimeError(
+                    f"BCB failed: {bcb_error}. IPEA fallback also failed: {ipea_error}"
+                ) from bcb_error
+        # No fallback available, raise original error
+        raise
 
 
 def fetch_cdi(start_date: str, end_date: str = None) -> pd.DataFrame:
     """
-    Fetch CDI accumulated index from BCB.
+    Fetch CDI accumulated index from BCB (with IPEA fallback).
 
     Returns DataFrame with 'date' and 'value' columns,
     where 'value' is the accumulated CDI factor (starts at 1).
     """
-    daily_rate = fetch_bcb_series(BCB_SERIES['CDI'], start_date, end_date)
+    daily_rate = fetch_bcb_series(BCB_SERIES['CDI'], start_date, end_date, series_name='CDI')
 
     # Convert daily rate to accumulated factor
     # CDI is given as daily % rate, so we compound it
@@ -73,12 +133,12 @@ def fetch_cdi(start_date: str, end_date: str = None) -> pd.DataFrame:
 
 def fetch_ipca(start_date: str, end_date: str = None) -> pd.DataFrame:
     """
-    Fetch IPCA accumulated index from BCB.
+    Fetch IPCA accumulated index from BCB (with IPEA fallback).
 
     Returns DataFrame with 'date' and 'value' columns,
     where 'value' is the accumulated IPCA factor (starts at 1).
     """
-    monthly_rate = fetch_bcb_series(BCB_SERIES['IPCA'], start_date, end_date)
+    monthly_rate = fetch_bcb_series(BCB_SERIES['IPCA'], start_date, end_date, series_name='IPCA')
 
     # Convert monthly rate to accumulated factor
     monthly_factor = 1 + (monthly_rate / 100)
@@ -97,12 +157,12 @@ def fetch_ipca(start_date: str, end_date: str = None) -> pd.DataFrame:
 
 def fetch_inpc(start_date: str, end_date: str = None) -> pd.DataFrame:
     """
-    Fetch INPC accumulated index from BCB.
+    Fetch INPC accumulated index from BCB (with IPEA fallback).
 
     Returns DataFrame with 'date' and 'value' columns,
     where 'value' is the accumulated INPC factor (starts at 1).
     """
-    monthly_rate = fetch_bcb_series(BCB_SERIES['INPC'], start_date, end_date)
+    monthly_rate = fetch_bcb_series(BCB_SERIES['INPC'], start_date, end_date, series_name='INPC')
 
     # Convert monthly rate to accumulated factor
     monthly_factor = 1 + (monthly_rate / 100)

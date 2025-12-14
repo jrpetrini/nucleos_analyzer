@@ -6,14 +6,12 @@ import pytest
 import pandas as pd
 from datetime import datetime
 
-import sys
-sys.path.insert(0, '/home/petrini/Documents/nucleos_analyzer')
-
 from business_logic import (
     filter_data_by_range,
     calculate_time_weighted_position,
     calculate_nucleos_stats,
     get_position_dates_for_benchmark,
+    simulate_and_calculate_benchmark,
 )
 
 
@@ -242,7 +240,7 @@ class TestCalculateNucleosStats:
             company_as_mine=False, colors=colors
         )
 
-        assert 'Jun 2020' in result['position_label']
+        assert '06/2020' in result['position_label']
 
     def test_cagr_positive_when_position_exceeds_invested(self, sample_position, sample_contributions, colors):
         """Test CAGR is positive when position > invested."""
@@ -361,6 +359,219 @@ class TestIntegration:
             company_as_mine=False, colors=colors
         )
 
-        assert 'May 2020' in result['position_label']
+        assert '05/2020' in result['position_label']
         # Invested should be ~3000 (3 months)
         assert '3,000' in result['invested_value'] or '3.000' in result['invested_value']
+
+
+class TestSimulateAndCalculateBenchmark:
+    """Tests for simulate_and_calculate_benchmark function."""
+
+    @pytest.fixture
+    def sample_data(self):
+        """Sample position and contribution data."""
+        pos = pd.DataFrame({
+            'data': pd.to_datetime([
+                '2020-01-31', '2020-02-29', '2020-03-31'
+            ]),
+            'posicao': [1050, 2120, 3200],
+        })
+        contrib = pd.DataFrame({
+            'data': pd.to_datetime(['2020-01-15', '2020-02-15', '2020-03-15']),
+            'contribuicao_total': [1000.0, 1000.0, 1000.0],
+            'contrib_participante': [500.0, 500.0, 500.0],
+            'contrib_patrocinador': [500.0, 500.0, 500.0],
+        })
+        return pos, contrib
+
+    def test_no_benchmark_returns_default(self, sample_data, colors):
+        """Test that 'none' benchmark returns default result."""
+        pos, contrib = sample_data
+        result = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='none',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache={},
+            company_as_mine=False,
+            colors=colors
+        )
+
+        assert result['simulation_df'] is None
+        assert result['cagr_text'] == '--'
+        assert result['label_text'] == 'Selecione um benchmark'
+
+    def test_empty_data_returns_default(self, colors):
+        """Test that empty data returns default result."""
+        empty_pos = pd.DataFrame(columns=['data', 'posicao'])
+        empty_contrib = pd.DataFrame(columns=['data', 'contribuicao_total'])
+
+        result = simulate_and_calculate_benchmark(
+            empty_contrib, empty_pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache={},
+            company_as_mine=False,
+            colors=colors
+        )
+
+        assert result['simulation_df'] is None
+        assert result['cagr_text'] == '--'
+
+    def test_positive_overhead_in_label(self, sample_data, colors):
+        """Test that positive overhead appears in label."""
+        pos, contrib = sample_data
+
+        # Create mock benchmark data in cache to avoid API call
+        benchmark_data = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01', '2020-04-01']),
+            'value': [1.0, 1.004, 1.008, 1.012]
+        })
+
+        result = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=2,  # +2% overhead
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache={'CDI': benchmark_data.to_dict('records')},
+            company_as_mine=False,
+            colors=colors
+        )
+
+        # Label should contain "+2%"
+        assert '+2%' in result['label_text']
+
+    def test_cache_is_used(self, sample_data, colors):
+        """Test that cached benchmark data is used."""
+        pos, contrib = sample_data
+
+        # Pre-populate cache
+        benchmark_data = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01', '2020-04-01']),
+            'value': [1.0, 1.004, 1.008, 1.012]
+        })
+        cache = {'CDI': benchmark_data.to_dict('records')}
+
+        result = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache=cache,
+            company_as_mine=False,
+            colors=colors
+        )
+
+        # Should have simulation data (cache was used, no API call needed)
+        assert result['simulation_df'] is not None
+        assert len(result['simulation_df']) > 0
+
+    def test_cagr_calculated_for_benchmark(self, sample_data, colors):
+        """Test that CAGR is calculated when benchmark simulation succeeds."""
+        pos, contrib = sample_data
+
+        # Create benchmark data with known growth
+        benchmark_data = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01', '2020-04-01']),
+            'value': [1.0, 1.01, 1.02, 1.03]  # ~1% monthly growth
+        })
+
+        result = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache={'CDI': benchmark_data.to_dict('records')},
+            company_as_mine=False,
+            colors=colors
+        )
+
+        # CAGR should be calculated (not '--' or 'N/A')
+        assert result['cagr_text'] != '--'
+        # Should contain percentage format
+        assert '% a.a.' in result['cagr_text']
+
+    def test_company_as_mine_uses_participant_contributions(self, sample_data, colors):
+        """Test that company_as_mine=True uses only participant contributions."""
+        pos, contrib = sample_data
+
+        benchmark_data = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01', '2020-04-01']),
+            'value': [1.0, 1.01, 1.02, 1.03]
+        })
+        cache = {'CDI': benchmark_data.to_dict('records')}
+
+        result_total = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache=cache,
+            company_as_mine=False,
+            colors=colors
+        )
+
+        result_participant = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache=cache,
+            company_as_mine=True,
+            colors=colors
+        )
+
+        # Benchmark position should be lower when using only participant contributions
+        total_pos = result_total['simulation_df']['posicao'].iloc[-1]
+        participant_pos = result_participant['simulation_df']['posicao'].iloc[-1]
+        assert participant_pos < total_pos
+
+    def test_inflation_deflation_applied_to_benchmark(self, sample_data, colors):
+        """Test that inflation data deflates benchmark simulation."""
+        pos, contrib = sample_data
+
+        benchmark_data = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01', '2020-04-01']),
+            'value': [1.0, 1.01, 1.02, 1.03]
+        })
+
+        # Inflation index (cumulative, ~1% monthly)
+        inflation_data = pd.DataFrame({
+            'date': pd.to_datetime(['2020-01-01', '2020-02-01', '2020-03-01', '2020-04-01']),
+            'value': [1.0, 1.01, 1.0201, 1.030301]
+        })
+
+        result_nominal = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache={'CDI': benchmark_data.to_dict('records')},
+            company_as_mine=False,
+            colors=colors,
+            inflation_data=None
+        )
+
+        result_real = simulate_and_calculate_benchmark(
+            contrib, pos,
+            benchmark_name='CDI',
+            overhead=0,
+            date_range={'start': '2020-01-01', 'end': '2020-03-31'},
+            cache={'CDI': benchmark_data.to_dict('records')},
+            company_as_mine=False,
+            colors=colors,
+            inflation_data=inflation_data,
+            inflation_ref_month='Mar 2020'
+        )
+
+        # Deflated values should be lower (inflation erodes value)
+        # Or higher for earlier periods relative to ref
+        assert result_nominal['simulation_df'] is not None
+        assert result_real['simulation_df'] is not None
+
+        # Final position should differ when deflation is applied
+        nominal_final = result_nominal['simulation_df']['posicao'].iloc[-1]
+        real_final = result_real['simulation_df']['posicao'].iloc[-1]
+        # With ~1% monthly inflation and ref at end, earlier values inflate
+        assert nominal_final != real_final
