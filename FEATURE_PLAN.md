@@ -15,8 +15,8 @@ Sequential implementation of 4 major dashboard features, each in its own feature
 | 4 | Mobile Responsiveness | 🔲 TODO | - |
 
 **Additional Work:**
-- Test Suite: 47 tests (commit e9e8a5f)
-- Business Day Calculation: Under investigation (see .claude/plans/vivid-napping-rainbow.md)
+- Test Suite: 71 tests (expanded from 47)
+- Business Day Calculation: ✅ DONE - Replaced ANBIMA calendar with 252/365.25 ratio for consistency
 
 ---
 
