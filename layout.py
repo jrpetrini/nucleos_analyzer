@@ -7,7 +7,7 @@ import pandas as pd
 from dash import dcc, html, dash_table
 
 from components import (
-    COLORS, OVERHEAD_OPTIONS, HELP_TEXTS,
+    COLORS, OVERHEAD_OPTIONS, FORECAST_OPTIONS, HELP_TEXTS,
     create_help_icon, create_data_table_styles, create_tab_style
 )
 from figures import create_position_figure, create_contributions_figure, create_empty_figure
@@ -373,6 +373,33 @@ def create_position_tab(benchmark_options: list, initial_fig) -> html.Div:
             'flexWrap': 'wrap',
             'gap': '0.5rem'
         }),
+        # Forecast controls
+        html.Div([
+            dcc.Checklist(
+                id='forecast-toggle',
+                options=[{'label': ' Projetar no futuro', 'value': 'enabled'}],
+                value=[],  # Default OFF
+                style={'color': COLORS['text']},
+                labelStyle={'display': 'flex', 'alignItems': 'center'}
+            ),
+            create_help_icon(HELP_TEXTS['forecast'], 'help-forecast'),
+            html.Label('Anos:', id='forecast-years-label',
+                       style={'color': COLORS['text_muted'], 'marginLeft': '1rem'}),
+            dcc.Dropdown(
+                id='forecast-years',
+                options=FORECAST_OPTIONS,
+                value=1,  # Default 1 year
+                clearable=False,
+                style={'width': '100px', 'color': '#000', 'opacity': '0.5'},
+                disabled=True  # Enabled only when forecast toggle ON
+            ),
+        ], style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'marginBottom': '1rem',
+            'flexWrap': 'wrap',
+            'gap': '0.5rem'
+        }),
         # Graph
         dcc.Loading(
             id='loading-graph',
@@ -533,6 +560,8 @@ def create_data_stores(position_data: list, contributions_data: list,
         dcc.Store(id='month-options', data=month_options),
         # PDF metadata (partial history detection)
         dcc.Store(id='pdf-metadata', data=pdf_metadata or {}),
+        # Forecast data (generated when toggle is ON)
+        dcc.Store(id='forecast-data', data=None),
     ]
 
 

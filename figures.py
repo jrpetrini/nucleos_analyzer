@@ -11,14 +11,18 @@ from components import COLORS, BENCHMARK_COLORS
 
 def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
                            benchmark_sim: pd.DataFrame = None,
-                           benchmark_label: str = None) -> go.Figure:
-    """Create the position line chart with optional benchmark comparison.
+                           benchmark_label: str = None,
+                           forecast_data: pd.DataFrame = None,
+                           forecast_benchmark: pd.DataFrame = None) -> go.Figure:
+    """Create the position line chart with optional benchmark comparison and forecast.
 
     Args:
         df_position: Pre-filtered position data with adjusted values
         benchmark_sim: Pre-filtered benchmark simulation data
         benchmark_label: Label for the benchmark curve
         log_scale: Whether to use logarithmic Y-axis
+        forecast_data: Optional forecast data for Nucleos (dashed line)
+        forecast_benchmark: Optional forecast data for benchmark (dashed line)
 
     Returns:
         Plotly Figure object
@@ -33,7 +37,7 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
         benchmark_sim = benchmark_sim.copy()
         benchmark_sim['data'] = benchmark_sim['data'].apply(lambda d: d.replace(day=15))
 
-    # Main position line
+    # Main position line (historical)
     if not df_position.empty:
         fig.add_trace(go.Scatter(
             x=df_position['data'],
@@ -45,7 +49,26 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             hovertemplate='<b>%{x|%b %Y}</b><br>Nucleos: R$ %{y:,.2f}<extra></extra>'
         ))
 
-    # Add benchmark curve if available
+    # Nucleos forecast (dashed line)
+    if forecast_data is not None and not forecast_data.empty:
+        # Connect forecast to last historical point
+        last_hist_date = df_position['data'].max()
+        last_hist_pos = df_position.loc[df_position['data'] == last_hist_date, 'posicao'].iloc[0]
+
+        # Prepend last historical point for continuity
+        forecast_x = [last_hist_date] + forecast_data['data'].tolist()
+        forecast_y = [last_hist_pos] + forecast_data['posicao'].tolist()
+
+        fig.add_trace(go.Scatter(
+            x=forecast_x,
+            y=forecast_y,
+            mode='lines',
+            name='Nucleos (projeção)',
+            line=dict(color=COLORS['primary'], width=2, dash='dash'),
+            hovertemplate='<b>%{x|%b %Y}</b><br>Projeção: R$ %{y:,.2f}<extra></extra>'
+        ))
+
+    # Add benchmark curve if available (historical)
     if benchmark_sim is not None and not benchmark_sim.empty and benchmark_label:
         # Get base benchmark name for color
         base_name = benchmark_label.split('+')[0].strip()
@@ -60,6 +83,28 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             marker=dict(size=5, color=color),
             hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{benchmark_label}: R$ %{{y:,.2f}}<extra></extra>'
         ))
+
+    # Benchmark forecast (dashed line)
+    if forecast_benchmark is not None and not forecast_benchmark.empty and benchmark_label:
+        base_name = benchmark_label.split('+')[0].strip()
+        color = BENCHMARK_COLORS.get(base_name, '#888888')
+
+        # Connect forecast to last benchmark point
+        if benchmark_sim is not None and not benchmark_sim.empty:
+            last_bench_date = benchmark_sim['data'].max()
+            last_bench_pos = benchmark_sim.loc[benchmark_sim['data'] == last_bench_date, 'posicao'].iloc[0]
+
+            forecast_x = [last_bench_date] + forecast_benchmark['data'].tolist()
+            forecast_y = [last_bench_pos] + forecast_benchmark['posicao'].tolist()
+
+            fig.add_trace(go.Scatter(
+                x=forecast_x,
+                y=forecast_y,
+                mode='lines',
+                name=f'{benchmark_label} (projeção)',
+                line=dict(color=color, width=2, dash='dash'),
+                hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{benchmark_label} proj: R$ %{{y:,.2f}}<extra></extra>'
+            ))
 
     fig.update_layout(
         title=dict(

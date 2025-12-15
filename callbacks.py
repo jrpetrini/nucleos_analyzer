@@ -11,7 +11,7 @@ from dash import callback, Output, Input, State, dcc
 
 from components import COLORS
 from figures import create_position_figure, create_contributions_figure, create_empty_figure
-from calculator import calculate_summary_stats
+from calculator import calculate_summary_stats, generate_forecast, xirr_bizdays
 from benchmarks import fetch_single_benchmark, apply_overhead_to_benchmark, simulate_benchmark
 from dashboard_helpers import prepare_dataframe, is_company_as_mine
 from business_logic import filter_data_by_range, calculate_nucleos_stats
@@ -70,6 +70,25 @@ def register_callbacks(app):
         return (not is_enabled, not is_enabled,
                 dropdown_style, ref_dropdown_style,
                 label_style, label_style)
+
+    @callback(
+        Output('forecast-years', 'disabled'),
+        Output('forecast-years', 'style'),
+        Output('forecast-years-label', 'style'),
+        Input('forecast-toggle', 'value')
+    )
+    def toggle_forecast_controls(forecast_toggle):
+        """Enable/disable forecast controls based on toggle."""
+        is_enabled = 'enabled' in (forecast_toggle or [])
+
+        if is_enabled:
+            dropdown_style = {'width': '100px', 'color': '#000'}
+            label_style = {'color': COLORS['text'], 'marginLeft': '1rem'}
+        else:
+            dropdown_style = {'width': '100px', 'color': '#000', 'opacity': '0.5'}
+            label_style = {'color': COLORS['text_muted'], 'marginLeft': '1rem'}
+
+        return not is_enabled, dropdown_style, label_style
 
     @callback(
         Output('inflation-reference-month', 'options'),
@@ -226,6 +245,7 @@ def register_callbacks(app):
         Output('benchmark-cagr-value', 'style'),
         Output('benchmark-cagr-label', 'children'),
         Output('benchmark-cache', 'data'),
+        Output('forecast-data', 'data'),
         Input('scale-toggle', 'value'),
         Input('start-month', 'value'),
         Input('end-month', 'value'),
@@ -234,6 +254,8 @@ def register_callbacks(app):
         Input('company-as-mine-toggle', 'value'),
         Input('position-data', 'data'),
         Input('contributions-data', 'data'),
+        Input('forecast-toggle', 'value'),
+        Input('forecast-years', 'value'),
         State('inflation-toggle', 'value'),
         State('inflation-index-select', 'value'),
         State('inflation-reference-month', 'value'),
@@ -244,13 +266,14 @@ def register_callbacks(app):
     )
     def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
                               company_as_mine, position_data, contributions_data,
+                              forecast_toggle, forecast_years,
                               inflation_toggle, inflation_index, inflation_ref_month,
                               contributions_original, date_range, cache, pdf_metadata):
         """Update the position graph and benchmark calculations."""
         if not position_data or not contributions_data:
             empty_fig = create_empty_figure("Carregue um PDF para visualizar")
             return (empty_fig, '--', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
-                    'Selecione um benchmark', cache or {})
+                    'Selecione um benchmark', cache or {}, None)
 
         df = pd.DataFrame(position_data)
         df['data'] = pd.to_datetime(df['data'])
@@ -278,6 +301,7 @@ def register_callbacks(app):
 
         benchmark_sim = None
         benchmark_label = None
+        bench_cagr = None  # For forecast
         benchmark_cagr_text = '--'
         benchmark_cagr_style = {'color': COLORS['text_muted'], 'margin': '0.5rem 0'}
         benchmark_label_text = 'Selecione um benchmark'
@@ -389,14 +413,111 @@ def register_callbacks(app):
 
                     benchmark_label_text = f'Posição {benchmark_label}: R$ {benchmark_final_value:,.2f}'
 
+        # Generate forecast if toggle is ON
+        forecast_nucleos = None
+        forecast_benchmark = None
+        forecast_store_data = None
+
+        is_forecast_on = 'enabled' in (forecast_toggle or [])
+        if is_forecast_on and forecast_years and not df_pos_filtered.empty:
+            # IMPORTANT: For forecasting, always use the REAL fund CAGR
+            # (calculated with total contributions), not the inflated
+            # "company as mine" CAGR. The fund's growth rate is the same
+            # regardless of how we account for contributions.
+            last_date = df_pos_filtered['data'].iloc[-1]
+            last_position = df_pos_filtered['posicao'].iloc[-1]
+
+            # Calculate the REAL Nucleos CAGR using TOTAL contributions
+            dates = df_contrib_filtered['data'].tolist() + [last_date]
+            amounts = [-amt for amt in df_contrib_filtered['contribuicao_total'].tolist()] + [last_position]
+            nucleos_cagr = xirr_bizdays(dates, amounts)
+
+            if nucleos_cagr is not None:
+                # Generate Nucleos forecast
+                # Note: company_as_mine only affects accounting display,
+                # not the actual growth (total × 1.85 is always invested)
+                forecast_nucleos = generate_forecast(
+                    df_pos_filtered,
+                    df_contrib_filtered,
+                    nucleos_cagr,
+                    forecast_years,
+                    company_as_mine=False  # Always use full investment for growth
+                )
+
+                # Store forecast data for table display
+                if not forecast_nucleos.empty:
+                    forecast_store_data = forecast_nucleos.to_dict('records')
+
+            # Generate benchmark forecast if benchmark is selected
+            # The benchmark CAGR should be the REAL index growth rate,
+            # regardless of "company as mine" toggle. We need to simulate
+            # with total contributions to get the real benchmark performance.
+            if benchmark_name and benchmark_name != 'none' and date_range:
+                # Get benchmark data for forecast CAGR calculation
+                cache_key = benchmark_name
+                if cache_key in cache:
+                    bench_raw = pd.DataFrame(cache[cache_key])
+                else:
+                    bench_raw = fetch_single_benchmark(
+                        benchmark_name, date_range['start'], date_range['end']
+                    )
+
+                if bench_raw is not None:
+                    # Apply overhead for consistency
+                    bench_with_overhead = apply_overhead_to_benchmark(bench_raw, overhead)
+
+                    # Simulate with TOTAL contributions (not participant only)
+                    df_contrib_full = df_contrib_orig_filtered[['data']].copy()
+                    df_contrib_full['contribuicao_total'] = df_contrib_orig_filtered['contribuicao_total']
+
+                    if not df_contrib_full.empty:
+                        first_month = df_contrib_full['data'].min().to_period('M')
+                        pos_dates = df_pos_filtered[
+                            df_pos_filtered['data'].dt.to_period('M') >= first_month
+                        ][['data']].copy()
+                    else:
+                        pos_dates = df_pos_filtered[['data']].copy()
+
+                    bench_sim_full = simulate_benchmark(
+                        df_contrib_full, bench_with_overhead, pos_dates
+                    )
+
+                    # Apply inflation adjustment if enabled
+                    if is_inflation_on and inflation_data is not None and not bench_sim_full.empty:
+                        from calculator import deflate_series
+                        bench_sim_full = deflate_series(bench_sim_full, inflation_data, inflation_ref_month, 'posicao')
+                        bench_sim_full['posicao'] = bench_sim_full['posicao_real']
+                        bench_sim_full = bench_sim_full.drop(columns=['posicao_real'])
+
+                    if not bench_sim_full.empty:
+                        bench_final_full = bench_sim_full['posicao'].iloc[-1]
+                        bench_dates = df_contrib_full['data'].tolist() + [last_date]
+                        bench_amounts = [-amt for amt in df_contrib_full['contribuicao_total'].tolist()] + [bench_final_full]
+                        real_bench_cagr = xirr_bizdays(bench_dates, bench_amounts)
+
+                        if real_bench_cagr is not None:
+                            # Generate forecast starting from the displayed benchmark_sim
+                            # (which may use participant-only contributions), but using
+                            # the real benchmark CAGR for growth projection
+                            if benchmark_sim is not None and not benchmark_sim.empty:
+                                forecast_benchmark = generate_forecast(
+                                    benchmark_sim,
+                                    df_contrib_filtered,
+                                    real_bench_cagr,
+                                    forecast_years,
+                                    company_as_mine=False
+                                )
+
         fig = create_position_figure(
             df_pos_filtered,
             log_scale=(scale == 'log'),
             benchmark_sim=benchmark_sim,
-            benchmark_label=benchmark_label
+            benchmark_label=benchmark_label,
+            forecast_data=forecast_nucleos,
+            forecast_benchmark=forecast_benchmark
         )
 
-        return fig, benchmark_cagr_text, benchmark_cagr_style, benchmark_label_text, cache
+        return fig, benchmark_cagr_text, benchmark_cagr_style, benchmark_label_text, cache, forecast_store_data
 
     @callback(
         Output('contributions-graph', 'figure'),

@@ -54,7 +54,18 @@ HELP_TEXTS = {
     'position_table': 'Tabela com os dados do gráfico. "Simulado" mostra quanto suas contribuições valeriam se investidas no benchmark. "Índice" mostra o valor bruto do índice (normalizado para 1 no início).',
     'contributions_table': 'Tabela com contribuições mensais, total investido acumulado e posição. Quando o toggle "empresa como sem custo" está ativo, mostra a divisão participante/patrocinador.',
     'inflation_adjustment': 'Ajusta valores para mostrar retornos reais. IPCA: inflação oficial. INPC: inflação para salários. Valores são ajustados para o mês de referência.',
+    'forecast': 'Projeta a posição no futuro usando o CAGR histórico e o padrão de contribuições. Quando o ajuste por inflação está ativo, a projeção também é deflacionada pela inflação projetada. Linha tracejada indica projeção (não garantida).',
 }
+
+# Forecast year options
+FORECAST_OPTIONS = [
+    {'label': '1 ano', 'value': 1},
+    {'label': '2 anos', 'value': 2},
+    {'label': '5 anos', 'value': 5},
+    {'label': '10 anos', 'value': 10},
+    {'label': '15 anos', 'value': 15},
+    {'label': '20 anos', 'value': 20},
+]
 
 
 def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:
