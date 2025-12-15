@@ -1,7 +1,6 @@
 /* Hover tooltip styles */
-.help-container:hover .help-tooltip {
-    visibility: visible !important;
-    opacity: 1 !important;
+.help-icon-container:hover .help-tooltip {
+    display: block !important;
 }
 
 .help-icon:hover {
