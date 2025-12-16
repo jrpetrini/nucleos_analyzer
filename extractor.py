@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """
 PDF extraction and file selection utilities for Nucleos Analyzer.
+
+TODO: SALDO TOTAL Feature - Remaining Implementation
+======================================================
+Phase 4: Update UI with warning icon and Posição inicial
+- Add dcc.Store('pdf-metadata') to store extraction metadata
+- Add warning icon (⚠️) next to end-month dropdown for partial PDFs
+- Tooltip shows: starting_position, missing_cotas, period info
+- Show "Posição inicial em MM/YYYY: R$ X" in position box
+- Only visible when is_partial_history == True
+
+Phase 5: Handle contributions graph for partial PDFs
+- Cumulative invested curve starts from 0 (not starting_position)
+- Position curve starts from starting_position
+- Gap at start is informative (shows prior history exists)
+- XIRR uses only visible PDF contributions (not starting_position)
 """
 
 import re
@@ -125,6 +140,122 @@ def _parse_pdf_rows(file_path: str) -> list[dict]:
             })
 
     return transactions
+
+
+def _extract_saldo_total(file_path: str) -> dict | None:
+    """
+    Extract SALDO TOTAL data from the SALDO DE CONTAS section.
+
+    Parses the PDF to find:
+    - SALDO TOTAL line: total cotas and R$ value
+    - Observação line: cota value and date
+
+    Args:
+        file_path: Path to the extratoIndividual.pdf file
+
+    Returns:
+        Dict with keys: saldo_total, total_cotas, cota_value, cota_date
+        Returns None if extraction fails
+    """
+    reader = pypdf.PdfReader(file_path)
+
+    # Patterns for SALDO TOTAL section
+    # SALDO TOTAL line: "SALDO TOTAL 74.963,13 55.555,1486062447"
+    # Format: SALDO TOTAL <valor> <cotas>
+    pat_saldo = re.compile(
+        r'SALDO\s+TOTAL\s+([0-9.,]+)\s+([0-9.,]+)',
+        re.IGNORECASE
+    )
+    # Observação line: "...cota 1.3493461878 do dia 01/12/2024"
+    pat_obs = re.compile(
+        r'cota\s+([0-9,]+)\s+do\s+dia\s+(\d{2}/\d{2}/\d{4})',
+        re.IGNORECASE
+    )
+
+    saldo_total = None
+    total_cotas = None
+    cota_value = None
+    cota_date = None
+
+    for page in reader.pages:
+        text = page.extract_text()
+        if not text:
+            continue
+
+        # Look for SALDO TOTAL line
+        match_saldo = pat_saldo.search(text)
+        if match_saldo:
+            # Parse value: "74.963,13" -> 74963.13 (first group)
+            valor_str = match_saldo.group(1)
+            saldo_total = float(valor_str.replace('.', '').replace(',', '.'))
+
+            # Parse cotas: "55.555,1486062447" -> 55555.1486062447 (second group)
+            cotas_str = match_saldo.group(2)
+            total_cotas = float(cotas_str.replace('.', '').replace(',', '.'))
+
+        # Look for Observação line with cota value and date
+        match_obs = pat_obs.search(text)
+        if match_obs:
+            # Parse cota value: "1,3493461878" -> 1.3493461878
+            cota_str = match_obs.group(1)
+            cota_value = float(cota_str.replace(',', '.'))
+            cota_date = match_obs.group(2)
+
+    if saldo_total is None or total_cotas is None:
+        return None
+
+    return {
+        'saldo_total': saldo_total,
+        'total_cotas': total_cotas,
+        'cota_value': cota_value,
+        'cota_date': cota_date,
+    }
+
+
+def _extract_rentabilidade_cota(file_path: str) -> dict | None:
+    """
+    Extract RENTABILIDADE DA COTA section - monthly cota values.
+
+    Parses the PDF to find monthly cota values in format:
+    <cota_value><MM/YYYY> (e.g., "1,234182930001/2024")
+
+    Args:
+        file_path: Path to the extratoIndividual.pdf file
+
+    Returns:
+        Dict mapping 'MM/YYYY' -> cota_value (float)
+        Returns None if extraction fails
+    """
+    reader = pypdf.PdfReader(file_path)
+
+    # Pattern for monthly cota entries: "1,234182930001/2024"
+    # Format: <cota_value><MM/YYYY> - value first, then month (no space)
+    pat_cota = re.compile(r'(\d+,\d+)(\d{2}/\d{4})')
+
+    rentabilidade = {}
+
+    for page in reader.pages:
+        text = page.extract_text()
+        if not text:
+            continue
+
+        # Only process if we're in or near RENTABILIDADE section
+        if 'RENTABILIDADE' not in text:
+            continue
+
+        # Find all monthly cota entries
+        for match in pat_cota.finditer(text):
+            cota_str = match.group(1)    # "1,2341829300"
+            month_year = match.group(2)  # "01/2024"
+            cota_value = float(cota_str.replace(',', '.'))
+
+            # Only include reasonable cota values (between 0.5 and 3.0)
+            # and valid months (01-12)
+            month = int(month_year[:2])
+            if 0.5 < cota_value < 3.0 and 1 <= month <= 12:
+                rentabilidade[month_year] = cota_value
+
+    return rentabilidade if rentabilidade else None
 
 
 def _build_raw_dataframe(transactions: list[dict]) -> pd.DataFrame:

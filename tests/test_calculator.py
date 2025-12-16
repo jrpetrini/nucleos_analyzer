@@ -151,6 +151,50 @@ class TestProcessPositionData:
             expected_position = row['cotas'] * row['valor_cota']
             assert abs(row['posicao'] - expected_position) < 0.01
 
+    def test_with_starting_cotas(self, sample_raw_transactions):
+        """Test position calculation with starting_cotas for partial PDFs."""
+        starting_cotas = 200.0
+
+        result = process_position_data(sample_raw_transactions, starting_cotas=starting_cotas)
+
+        # January: 200 + 50 + 50 = 300 cotas
+        # February: 300 + 50 + 50 = 400 cotas
+        # March: 400 + 100 = 500 cotas
+        assert result.iloc[0]['cotas'] == 300
+        assert result.iloc[1]['cotas'] == 400
+        assert result.iloc[2]['cotas'] == 500
+
+    def test_position_with_starting_cotas(self, sample_raw_transactions):
+        """Test that position = (starting_cotas + cumsum) * valor_cota."""
+        starting_cotas = 200.0
+
+        result = process_position_data(sample_raw_transactions, starting_cotas=starting_cotas)
+
+        for _, row in result.iterrows():
+            expected_position = row['cotas'] * row['valor_cota']
+            assert abs(row['posicao'] - expected_position) < 0.01
+
+    def test_zero_starting_cotas_same_as_no_argument(self, sample_raw_transactions):
+        """Test that starting_cotas=0 gives same result as default."""
+        result_default = process_position_data(sample_raw_transactions)
+        result_zero = process_position_data(sample_raw_transactions, starting_cotas=0)
+
+        pd.testing.assert_frame_equal(result_default, result_zero)
+
+    def test_starting_cotas_affects_first_position(self, sample_raw_transactions):
+        """Test that starting_cotas increases first row position."""
+        result_no_start = process_position_data(sample_raw_transactions)
+        result_with_start = process_position_data(sample_raw_transactions, starting_cotas=100)
+
+        # With starting cotas, position should be higher
+        assert result_with_start.iloc[0]['posicao'] > result_no_start.iloc[0]['posicao']
+
+        # Difference should be starting_cotas * valor_cota
+        first_cota_value = result_no_start.iloc[0]['valor_cota']
+        expected_diff = 100 * first_cota_value
+        actual_diff = result_with_start.iloc[0]['posicao'] - result_no_start.iloc[0]['posicao']
+        assert abs(actual_diff - expected_diff) < 0.01
+
 
 class TestProcessContributionsData:
     """Tests for the process_contributions_data function."""

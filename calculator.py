@@ -72,18 +72,20 @@ def xirr_bizdays(dates: list, amounts: list) -> float | None:
             return None
 
 
-def process_position_data(df_raw: pd.DataFrame) -> pd.DataFrame:
+def process_position_data(df_raw: pd.DataFrame, starting_cotas: float = 0) -> pd.DataFrame:
     """
     Process raw transaction data to get monthly positions.
 
     Args:
         df_raw: Raw dataframe from extract_data_from_pdf
+        starting_cotas: Number of cotas held before the first transaction in df_raw.
+                       Used for partial PDFs where prior history is not included.
 
     Returns:
         DataFrame with monthly position data (data, cotas, posicao, valor_cota)
     """
     df = df_raw.copy(deep=True)
-    df['cotas_cumsum'] = df['cotas'].cumsum()
+    df['cotas_cumsum'] = df['cotas'].cumsum() + starting_cotas
     df['posicao'] = df['cotas_cumsum'] * df['valor_cota']
 
     df = (
