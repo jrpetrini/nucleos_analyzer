@@ -611,7 +611,7 @@ def register_callbacks(app):
         df_contrib = pd.DataFrame(contributions_data)
         df_contrib['data'] = pd.to_datetime(df_contrib['data'])
 
-        df_pos_filtered, df_contrib_filtered, _, _ = filter_data_by_range(
+        df_pos_filtered, df_contrib_filtered, position_before_start, _ = filter_data_by_range(
             df, df_contrib, start_date, end_date
         )
 

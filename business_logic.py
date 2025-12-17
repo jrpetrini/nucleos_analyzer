@@ -194,28 +194,33 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
     period_end = df_pos_filtered['data'].iloc[-1]
     end_position_original = df_pos_filtered['posicao'].iloc[-1] + position_before_start
 
-    # For partial PDFs, exclude the value of invisible cotas from positions
-    # Position data includes missing_cotas, but we want returns only for visible contributions
+    # DYNAMIC PARTIAL DETECTION:
+    # When start date is changed (position_before_start > 0), calculate equivalent
+    # missing_cotas. This unifies behavior between:
+    # - Actual partial PDFs (missing_cotas from SALDO_TOTAL discrepancy)
+    # - Full PDFs with start date filter (equivalent missing_cotas from position_before_start)
+    #
+    # Note: position_before_start already INCLUDES the value of any existing missing_cotas.
+    # So cotas_before_start REPLACES missing_cotas, not adds to it.
+    if position_before_start > 0 and 'valor_cota' in df_pos.columns:
+        start_dt = df_pos_filtered['data'].iloc[0]
+        df_before = df_pos[df_pos['data'] < start_dt]
+        if not df_before.empty and 'valor_cota' in df_before.columns:
+            valor_cota_start = df_before['valor_cota'].iloc[-1]
+            # Cotas that existed before the filtered start date (includes any original missing_cotas)
+            cotas_before_start = position_before_start / valor_cota_start
+            # Replace missing_cotas - cotas_before_start already accounts for original missing_cotas
+            missing_cotas = cotas_before_start
+
+    # Exclude the value of invisible cotas from positions for CAGR calculation
+    # This applies to both partial PDFs and full PDFs with start date filter
     if missing_cotas > 0 and 'valor_cota' in df_pos_filtered.columns:
         valor_cota_end = df_pos_filtered['valor_cota'].iloc[-1]
         invisible_position_end = missing_cotas * valor_cota_end
 
-        # Also adjust start position if filtering to a sub-range
-        if position_before_start > 0:
-            # Find valor_cota at the position before start
-            start_dt = df_pos_filtered['data'].iloc[0]
-            df_before = df_pos[df_pos['data'] < start_dt]
-            if not df_before.empty and 'valor_cota' in df_before.columns:
-                valor_cota_start = df_before['valor_cota'].iloc[-1]
-                invisible_position_start = missing_cotas * valor_cota_start
-            else:
-                invisible_position_start = invisible_position_end  # Fallback
-        else:
-            invisible_position_start = 0
-
         # Adjusted positions exclude invisible cotas
         adjusted_end_position = end_position_original - invisible_position_end
-        adjusted_start_position = position_before_start - invisible_position_start
+        adjusted_start_position = 0  # All invisible cotas are now accounted for in missing_cotas
     else:
         adjusted_end_position = end_position_original
         adjusted_start_position = position_before_start
