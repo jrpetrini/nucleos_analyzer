@@ -175,6 +175,7 @@ def register_callbacks(app):
     @callback(
         Output('position-label', 'children'),
         Output('current-position-value', 'children'),
+        Output('invested-label', 'children'),
         Output('total-invested-value', 'children'),
         Output('nucleos-cagr-value', 'children'),
         Output('nucleos-cagr-value', 'style'),
@@ -190,7 +191,8 @@ def register_callbacks(app):
     def update_nucleos_stats(company_as_mine, start_date, end_date, contributions_data, position_data, pdf_metadata):
         """Update Nucleos statistics cards."""
         if not contributions_data or not position_data:
-            return ('Posição', 'R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
+            return ('Posição', 'R$ 0,00', 'Total Investido', 'R$ 0,00', 'N/A',
+                    {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
                     'R$ 0,00 total', {'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'})
 
         df_contrib = prepare_dataframe(contributions_data)
@@ -210,6 +212,7 @@ def register_callbacks(app):
         return (
             stats['position_label'],
             stats['position_value'],
+            stats['invested_label'],
             stats['invested_value'],
             stats['cagr_text'],
             stats['cagr_style'],
@@ -401,9 +404,10 @@ def register_callbacks(app):
         Input('start-month', 'value'),
         Input('end-month', 'value'),
         Input('contributions-monthly-data', 'data'),
-        Input('position-data', 'data')
+        Input('position-data', 'data'),
+        State('pdf-metadata', 'data')
     )
-    def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data, position_data):
+    def update_contributions_graph(company_as_mine, start_date, end_date, monthly_data, position_data, pdf_metadata):
         """Update the contributions graph."""
         if not monthly_data or not position_data:
             return create_empty_figure("Carregue um PDF para visualizar")
@@ -415,9 +419,20 @@ def register_callbacks(app):
             df_pos, df_monthly, start_date, end_date
         )
 
+        is_partial = pdf_metadata.get('is_partial', False) if pdf_metadata else False
+
+        # For partial PDFs, subtract invisible cotas' value to show only visible growth
+        if is_partial and 'valor_cota' in df_pos_filtered.columns:
+            missing_cotas = pdf_metadata.get('missing_cotas', 0.0)
+            df_pos_for_contrib = df_pos_filtered.copy()
+            df_pos_for_contrib['posicao'] = df_pos_for_contrib['posicao'] - (missing_cotas * df_pos_for_contrib['valor_cota'])
+        else:
+            df_pos_for_contrib = df_pos_filtered
+
         return create_contributions_figure(
-            df_monthly_filtered, df_position=df_pos_filtered,
-            show_split=is_company_as_mine(company_as_mine)
+            df_monthly_filtered, df_position=df_pos_for_contrib,
+            show_split=is_company_as_mine(company_as_mine),
+            is_partial=is_partial
         )
 
     @callback(

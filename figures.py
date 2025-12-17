@@ -25,6 +25,14 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
     """
     fig = go.Figure()
 
+    # Shift dates to mid-month (15th) to avoid UTC timezone rollover issues
+    if not df_position.empty:
+        df_position = df_position.copy()
+        df_position['data'] = df_position['data'].apply(lambda d: d.replace(day=15))
+    if benchmark_sim is not None and not benchmark_sim.empty:
+        benchmark_sim = benchmark_sim.copy()
+        benchmark_sim['data'] = benchmark_sim['data'].apply(lambda d: d.replace(day=15))
+
     # Main position line
     if not df_position.empty:
         fig.add_trace(go.Scatter(
@@ -60,10 +68,11 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             x=0.5
         ),
         xaxis=dict(
-            title='',
+            title=dict(text='Mês Fechamento', font=dict(color=COLORS['text'])),
             gridcolor=COLORS['grid'],
             tickfont=dict(color=COLORS['text_muted']),
-            tickformat='%b %Y'
+            tickformat='%b %Y',
+            ticklabelmode='period'
         ),
         yaxis=dict(
             title=dict(text='Posição (R$)', font=dict(color=COLORS['text'])),
@@ -91,7 +100,8 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
 
 def create_contributions_figure(df_contributions: pd.DataFrame,
                                  df_position: pd.DataFrame = None,
-                                 show_split: bool = False) -> go.Figure:
+                                 show_split: bool = False,
+                                 is_partial: bool = False) -> go.Figure:
     """Create the contributions bar chart with position and invested curves.
 
     Args:
@@ -103,6 +113,14 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         Plotly Figure object
     """
     fig = go.Figure()
+
+    # Shift dates to mid-month (15th) to avoid UTC timezone rollover issues
+    # (e.g., Dec 31 local → Jan 1 UTC in hover)
+    df_contributions = df_contributions.copy()
+    df_contributions['data'] = df_contributions['data'].apply(lambda d: d.replace(day=15))
+    if df_position is not None and not df_position.empty:
+        df_position = df_position.copy()
+        df_position['data'] = df_position['data'].apply(lambda d: d.replace(day=15))
 
     if show_split and 'contrib_participante' in df_contributions.columns:
         # Stacked bar chart
@@ -167,15 +185,17 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
 
     # Add position curve (already adjusted relative to start of range)
     if df_position is not None and not df_position.empty:
+        # For partial PDFs, this shows only the visible portion (delta)
+        position_label = 'ΔNucleos' if is_partial else 'Nucleos'
         fig.add_trace(go.Scatter(
             x=df_position['data'],
             y=df_position['posicao'],
             mode='lines+markers',
-            name='Nucleos',
+            name=position_label,
             line=dict(color=COLORS['primary'], width=3),
             marker=dict(size=6),
             yaxis='y2',
-            hovertemplate='<b>%{x|%b %Y}</b><br>Variação: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{position_label}: R$ %{{y:,.2f}}<extra></extra>'
         ))
 
     fig.update_layout(
@@ -185,10 +205,11 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             x=0.5
         ),
         xaxis=dict(
-            title='',
+            title=dict(text='Mês Fechamento', font=dict(color=COLORS['text'])),
             gridcolor=COLORS['grid'],
             tickfont=dict(color=COLORS['text_muted']),
-            tickformat='%b %Y'
+            tickformat='%b %Y',
+            ticklabelmode='period'
         ),
         yaxis=dict(
             title=dict(text='Contribuição Mensal (R$)', font=dict(color=COLORS['text'])),

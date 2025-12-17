@@ -150,7 +150,7 @@ def create_summary_cards() -> dcc.Loading:
                 # Total invested card
                 html.Div([
                     html.Div([
-                        html.P('Total Investido',
+                        html.P(id='invested-label', children='Total Investido',
                                style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
                     ]),
                     html.H2(id='total-invested-value', style={'color': COLORS['participant'], 'margin': '0.5rem 0'})

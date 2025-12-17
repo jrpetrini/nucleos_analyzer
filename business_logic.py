@@ -265,9 +265,18 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
     # Format position label with end date
     position_label = f"Posição em {period_end.strftime('%m/%Y')}"
 
+    # Format invested label with date range
+    start_month_str = period_start.strftime('%m/%Y')
+    end_month_str = period_end.strftime('%m/%Y')
+    if start_month_str == end_month_str:
+        invested_label = f"Investido em {end_month_str}"
+    else:
+        invested_label = f"Investido de {start_month_str} a {end_month_str}"
+
     return {
         'position_label': position_label,
         'position_value': position_text,
+        'invested_label': invested_label,
         'invested_value': invested_text,
         'cagr_text': cagr_text,
         'cagr_style': {'color': cagr_color, 'margin': '0.5rem 0'},
@@ -281,6 +290,7 @@ def _empty_nucleos_stats(colors: dict) -> dict:
     return {
         'position_label': 'Posição',
         'position_value': 'R$ 0,00',
+        'invested_label': 'Total Investido',
         'invested_value': 'R$ 0,00',
         'cagr_text': 'N/A',
         'cagr_style': {'color': colors.get('text_muted', '#94a3b8'), 'margin': '0.5rem 0'},

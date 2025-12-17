@@ -227,7 +227,7 @@ def debug_benchmark_cagr(pdf_path: str, start_date: str = None, end_date: str = 
     print("ANALYSIS COMPLETE")
     print("=" * 80)
 
-    return bench_cagr, benchmark_final_value, dates, amounts
+    return bench_cagr, benchmark_final_value, dates, amounts_live
 
 
 if __name__ == '__main__':
