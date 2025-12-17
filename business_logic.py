@@ -155,7 +155,8 @@ def calculate_time_weighted_position(df_contrib: pd.DataFrame,
 
 def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
                             start_date: str, end_date: str,
-                            company_as_mine: bool, colors: dict) -> dict:
+                            company_as_mine: bool, colors: dict,
+                            missing_cotas: float = 0.0) -> dict:
     """
     Calculate Nucleos stats (position, invested, CAGR, return).
 
@@ -168,6 +169,7 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
         end_date: End date ISO string
         company_as_mine: Whether to treat company contributions as "free"
         colors: Color palette dictionary
+        missing_cotas: For partial PDFs, the number of cotas from prior history
 
     Returns:
         dict with keys: position_label, position_value, invested_value,
@@ -192,30 +194,58 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
     period_end = df_pos_filtered['data'].iloc[-1]
     end_position_original = df_pos_filtered['posicao'].iloc[-1] + position_before_start
 
+    # For partial PDFs, exclude the value of invisible cotas from positions
+    # Position data includes missing_cotas, but we want returns only for visible contributions
+    if missing_cotas > 0 and 'valor_cota' in df_pos_filtered.columns:
+        valor_cota_end = df_pos_filtered['valor_cota'].iloc[-1]
+        invisible_position_end = missing_cotas * valor_cota_end
+
+        # Also adjust start position if filtering to a sub-range
+        if position_before_start > 0:
+            # Find valor_cota at the position before start
+            start_dt = df_pos_filtered['data'].iloc[0]
+            df_before = df_pos[df_pos['data'] < start_dt]
+            if not df_before.empty and 'valor_cota' in df_before.columns:
+                valor_cota_start = df_before['valor_cota'].iloc[-1]
+                invisible_position_start = missing_cotas * valor_cota_start
+            else:
+                invisible_position_start = invisible_position_end  # Fallback
+        else:
+            invisible_position_start = 0
+
+        # Adjusted positions exclude invisible cotas
+        adjusted_end_position = end_position_original - invisible_position_end
+        adjusted_start_position = position_before_start - invisible_position_start
+    else:
+        adjusted_end_position = end_position_original
+        adjusted_start_position = position_before_start
+        invisible_position_end = 0
+
     # Calculate time-weighted position for this period's contributions
     _, position_from_contributions = calculate_time_weighted_position(
         df_contrib_filtered,
-        start_position=position_before_start,
-        end_position=end_position_original,
+        start_position=adjusted_start_position,
+        end_position=adjusted_end_position,
         period_start=period_start,
         period_end=period_end,
         contribution_col=contrib_col
     )
 
-    # Position shows only what this period's contributions became (with their returns)
-    position_display = position_from_contributions
+    # Position card shows TOTAL position (what user actually has)
+    # This matches the graph and SALDO TOTAL from the PDF
+    position_display = end_position_original
 
-    # Total return = position from contributions minus what was invested
+    # Total return = what visible contributions grew to minus what was invested
+    # (For partial PDFs, this is the return on visible contributions only)
     total_return = position_from_contributions - total_invested_in_range
 
     # Calculate XIRR for the selected period
     amounts_for_xirr = df_contrib_filtered[contrib_col].tolist() if not df_contrib_filtered.empty else []
 
-    # Build cash flows: contributions (outflows) + what they became (inflow)
+    # Build cash flows: contributions (outflows) + final position of visible contributions (inflow)
     contrib_dates = df_contrib_filtered['data'].tolist() if not df_contrib_filtered.empty else []
     contrib_amounts = [-amt for amt in amounts_for_xirr]
 
-    # Use position_from_contributions as the final value (what contributions became)
     dates = contrib_dates + [period_end]
     amounts = contrib_amounts + [position_from_contributions]
 

@@ -185,8 +185,9 @@ def register_callbacks(app):
         Input('end-month', 'value'),
         Input('contributions-data', 'data'),
         Input('position-data', 'data'),
+        State('pdf-metadata', 'data'),
     )
-    def update_nucleos_stats(company_as_mine, start_date, end_date, contributions_data, position_data):
+    def update_nucleos_stats(company_as_mine, start_date, end_date, contributions_data, position_data, pdf_metadata):
         """Update Nucleos statistics cards."""
         if not contributions_data or not position_data:
             return ('Posição', 'R$ 0,00', 'R$ 0,00', 'N/A', {'color': COLORS['text_muted'], 'margin': '0.5rem 0'},
@@ -195,9 +196,15 @@ def register_callbacks(app):
         df_contrib = prepare_dataframe(contributions_data)
         df_pos = prepare_dataframe(position_data)
 
+        # Get missing_cotas for partial PDFs (to calculate growth correctly)
+        missing_cotas = 0.0
+        if pdf_metadata and pdf_metadata.get('is_partial'):
+            missing_cotas = pdf_metadata.get('missing_cotas', 0.0)
+
         stats = calculate_nucleos_stats(
             df_contrib, df_pos, start_date, end_date,
-            is_company_as_mine(company_as_mine), COLORS
+            is_company_as_mine(company_as_mine), COLORS,
+            missing_cotas=missing_cotas
         )
 
         return (
@@ -229,12 +236,13 @@ def register_callbacks(app):
         State('inflation-reference-month', 'value'),
         State('contributions-data-original', 'data'),
         State('date-range-data', 'data'),
-        State('benchmark-cache', 'data')
+        State('benchmark-cache', 'data'),
+        State('pdf-metadata', 'data'),
     )
     def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
                               company_as_mine, position_data, contributions_data,
                               inflation_toggle, inflation_index, inflation_ref_month,
-                              contributions_original, date_range, cache):
+                              contributions_original, date_range, cache, pdf_metadata):
         """Update the position graph and benchmark calculations."""
         if not position_data or not contributions_data:
             empty_fig = create_empty_figure("Carregue um PDF para visualizar")
@@ -301,6 +309,17 @@ def register_callbacks(app):
                 df_contrib_sim = df_contrib_orig_filtered[['data']].copy()
                 df_contrib_sim['contribuicao_total'] = contrib_amounts
 
+                # For partial PDFs, prepend starting position as initial "contribution"
+                # This makes benchmark start from same position as Nucleos
+                if pdf_metadata and pdf_metadata.get('is_partial'):
+                    starting_pos = pdf_metadata.get('starting_position', 0)
+                    first_pos_date = df_pos_filtered['data'].min()
+                    starting_contrib = pd.DataFrame({
+                        'data': [first_pos_date],
+                        'contribuicao_total': [starting_pos]
+                    })
+                    df_contrib_sim = pd.concat([starting_contrib, df_contrib_sim], ignore_index=True)
+
                 if not df_contrib_sim.empty:
                     first_contrib_month = df_contrib_sim['data'].min().to_period('M')
                     position_dates_for_bench = df_pos_filtered[
@@ -332,8 +351,29 @@ def register_callbacks(app):
                     else:
                         contrib_for_cagr = df_contrib_filtered['contribuicao_total']
 
+                    # For partial PDFs, CAGR should only measure visible contributions' growth
+                    # (matching Nucleos which excludes invisible cotas from CAGR).
+                    # We need a separate simulation without starting_position for this.
+                    if pdf_metadata and pdf_metadata.get('is_partial'):
+                        # Simulate benchmark with only visible contributions (no starting_position)
+                        df_contrib_visible_only = df_contrib_orig_filtered[['data']].copy()
+                        df_contrib_visible_only['contribuicao_total'] = contrib_amounts
+                        bench_sim_for_cagr = simulate_benchmark(
+                            df_contrib_visible_only,
+                            benchmark_with_overhead,
+                            position_dates_for_bench
+                        )
+                        if is_inflation_on and inflation_data is not None and not bench_sim_for_cagr.empty:
+                            from calculator import deflate_series
+                            bench_sim_for_cagr = deflate_series(bench_sim_for_cagr, inflation_data, inflation_ref_month, 'posicao')
+                            bench_sim_for_cagr['posicao'] = bench_sim_for_cagr['posicao_real']
+                        cagr_final_value = bench_sim_for_cagr['posicao'].iloc[-1] if not bench_sim_for_cagr.empty else 0
+                    else:
+                        cagr_final_value = benchmark_final_value
+
                     dates = df_contrib_filtered['data'].tolist() + [last_date]
-                    amounts = [-amt for amt in contrib_for_cagr.tolist()] + [benchmark_final_value]
+                    amounts = [-amt for amt in contrib_for_cagr.tolist()] + [cagr_final_value]
+
                     bench_cagr = xirr_bizdays(dates, amounts)
 
                     if bench_cagr is not None:
@@ -393,16 +433,20 @@ def register_callbacks(app):
         Output('start-month', 'options'),
         Output('start-month', 'value'),
         Output('data-loaded', 'data'),
+        Output('pdf-metadata', 'data'),
         Input('pdf-upload', 'contents'),
         State('pdf-upload', 'filename'),
         prevent_initial_call=True
     )
     def upload_pdf(contents, filename):
         """Process uploaded PDF file."""
+        import tempfile
+        import os
+
         if contents is None:
             raise dash.exceptions.PreventUpdate
 
-        from extractor import extract_data_from_pdf
+        from extractor import extract_data_from_pdf, detect_partial_history
         from calculator import process_position_data, process_contributions_data
 
         content_type, content_string = contents.split(',')
@@ -410,7 +454,23 @@ def register_callbacks(app):
         pdf_file = io.BytesIO(decoded)
 
         df_raw, df_contributions_raw = extract_data_from_pdf(pdf_file)
-        df_position = process_position_data(df_raw)
+
+        # Detect partial history (need temp file for SALDO extraction)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+            tmp.write(decoded)
+            tmp_path = tmp.name
+
+        try:
+            pdf_metadata = detect_partial_history(tmp_path, df_raw)
+        finally:
+            os.unlink(tmp_path)
+
+        # For partial PDFs, add starting_cotas to position data so totals are correct
+        starting_cotas = 0.0
+        if pdf_metadata and pdf_metadata.get('is_partial'):
+            starting_cotas = pdf_metadata.get('missing_cotas', 0.0)
+
+        df_position = process_position_data(df_raw, starting_cotas=starting_cotas)
         df_contributions_monthly = process_contributions_data(df_contributions_raw)
 
         month_options = [
@@ -441,6 +501,7 @@ def register_callbacks(app):
             month_options,
             min_date.isoformat(),
             True,
+            pdf_metadata or {},
         )
 
     @callback(
@@ -465,6 +526,46 @@ def register_callbacks(app):
         return base_style
 
     @callback(
+        Output('partial-pdf-warning', 'style'),
+        Input('pdf-metadata', 'data')
+    )
+    def update_partial_warning(pdf_metadata):
+        """Show/hide partial PDF warning icon based on metadata."""
+        base_style = {
+            'position': 'relative',
+            'verticalAlign': 'middle'
+        }
+        if pdf_metadata and pdf_metadata.get('is_partial'):
+            base_style['display'] = 'inline-block'
+        else:
+            base_style['display'] = 'none'
+        return base_style
+
+    @callback(
+        Output('starting-position-info', 'children'),
+        Output('starting-position-info', 'style'),
+        Input('pdf-metadata', 'data')
+    )
+    def update_starting_position_info(pdf_metadata):
+        """Show starting position info for partial PDFs."""
+        hidden_style = {'display': 'none'}
+
+        if not pdf_metadata or not pdf_metadata.get('is_partial'):
+            return '', hidden_style
+
+        starting_pos = pdf_metadata.get('starting_position', 0)
+        first_month = pdf_metadata.get('first_month', '')
+
+        text = f'Posição antes de {first_month}: R$ {starting_pos:,.2f}'
+        visible_style = {
+            'display': 'block',
+            'color': COLORS['text_muted'],
+            'margin': '0.25rem 0 0 0',
+            'fontSize': '0.75rem'
+        }
+        return text, visible_style
+
+    @callback(
         Output('position-data-table', 'data'),
         Output('position-data-table', 'columns'),
         Input('start-month', 'value'),
@@ -478,12 +579,13 @@ def register_callbacks(app):
         State('inflation-index-select', 'value'),
         State('inflation-reference-month', 'value'),
         State('date-range-data', 'data'),
-        State('benchmark-cache', 'data')
+        State('benchmark-cache', 'data'),
+        State('pdf-metadata', 'data'),
     )
     def update_position_table(start_date, end_date, benchmark_name, overhead,
                               company_as_mine, position_data, contributions_data,
                               inflation_toggle, inflation_index, inflation_ref_month,
-                              date_range, cache):
+                              date_range, cache, pdf_metadata):
         """Populate position data table with Nucleos and benchmark values."""
         if not position_data or not contributions_data:
             return [], []
@@ -572,6 +674,16 @@ def register_callbacks(app):
 
                 df_contrib_sim = df_contrib_filtered[['data']].copy()
                 df_contrib_sim['contribuicao_total'] = contrib_amounts
+
+                # For partial PDFs, prepend starting position as initial "contribution"
+                if pdf_metadata and pdf_metadata.get('is_partial'):
+                    starting_pos = pdf_metadata.get('starting_position', 0)
+                    first_pos_date = df_pos_filtered['data'].min()
+                    starting_contrib = pd.DataFrame({
+                        'data': [first_pos_date],
+                        'contribuicao_total': [starting_pos]
+                    })
+                    df_contrib_sim = pd.concat([starting_contrib, df_contrib_sim], ignore_index=True)
 
                 if not df_contrib_sim.empty:
                     first_contrib_month = df_contrib_sim['data'].min().to_period('M')

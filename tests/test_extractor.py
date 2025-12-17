@@ -487,3 +487,112 @@ class TestPartialHistoryDetection:
         assert starting_position > 0, "Starting position should be positive"
         assert starting_position < a['saldo_total'], \
             "Starting position should be less than final SALDO"
+
+
+class TestDetectPartialHistory:
+    """Tests for detect_partial_history() function.
+
+    This function should be the single entry point for detecting partial PDFs
+    and calculating starting_position. It returns a metadata dict with all
+    necessary info for UI display.
+    """
+
+    PARTIAL_THRESHOLD = 0.1
+
+    def test_full_pdf_returns_not_partial(self):
+        """Full PDF should return is_partial=False."""
+        from extractor import detect_partial_history
+
+        assert PDF_2023_TO_2025.exists(), f"REQUIRED fixture: {PDF_2023_TO_2025}"
+        df_raw, _ = extract_data_from_pdf(str(PDF_2023_TO_2025))
+        result = detect_partial_history(str(PDF_2023_TO_2025), df_raw)
+
+        assert result is not None
+        assert result['is_partial'] is False
+
+    def test_partial_pdf_returns_is_partial(self):
+        """Partial PDF should return is_partial=True."""
+        from extractor import detect_partial_history
+
+        assert SAMPLE_PDF.exists(), f"REQUIRED fixture: {SAMPLE_PDF}"
+        df_raw, _ = extract_data_from_pdf(str(SAMPLE_PDF))
+        result = detect_partial_history(str(SAMPLE_PDF), df_raw)
+
+        assert result is not None
+        assert result['is_partial'] is True
+
+    def test_returns_required_keys(self):
+        """Result dict should contain all required keys."""
+        from extractor import detect_partial_history
+
+        assert SAMPLE_PDF.exists(), f"REQUIRED fixture: {SAMPLE_PDF}"
+        df_raw, _ = extract_data_from_pdf(str(SAMPLE_PDF))
+        result = detect_partial_history(str(SAMPLE_PDF), df_raw)
+
+        required_keys = ['is_partial', 'missing_cotas', 'starting_position', 'first_month']
+        for key in required_keys:
+            assert key in result, f"Missing required key: {key}"
+
+    def test_full_pdf_starting_position_near_zero(self):
+        """Full PDF should have starting_position ≈ 0."""
+        from extractor import detect_partial_history
+
+        assert PDF_2023_TO_2025.exists(), f"REQUIRED fixture: {PDF_2023_TO_2025}"
+        df_raw, _ = extract_data_from_pdf(str(PDF_2023_TO_2025))
+        result = detect_partial_history(str(PDF_2023_TO_2025), df_raw)
+
+        assert abs(result['starting_position']) < 1.0, \
+            f"Full PDF starting_position should be ~0, got {result['starting_position']}"
+
+    def test_partial_pdf_starting_position_positive(self):
+        """Partial PDF should have positive starting_position."""
+        from extractor import detect_partial_history
+
+        assert PDF_PARTIAL_2024.exists(), f"REQUIRED fixture: {PDF_PARTIAL_2024}"
+        df_raw, _ = extract_data_from_pdf(str(PDF_PARTIAL_2024))
+        result = detect_partial_history(str(PDF_PARTIAL_2024), df_raw)
+
+        assert result['starting_position'] > 0, \
+            "Partial PDF should have positive starting_position"
+        # Half-year partial should have significant starting position
+        assert result['starting_position'] > 10000, \
+            f"Half-year partial should have large starting_position, got {result['starting_position']}"
+
+    def test_first_month_format(self):
+        """first_month should be in MM/YYYY format."""
+        from extractor import detect_partial_history
+
+        assert SAMPLE_PDF.exists(), f"REQUIRED fixture: {SAMPLE_PDF}"
+        df_raw, _ = extract_data_from_pdf(str(SAMPLE_PDF))
+        result = detect_partial_history(str(SAMPLE_PDF), df_raw)
+
+        # Should match MM/YYYY pattern
+        import re
+        assert re.match(r'\d{2}/\d{4}', result['first_month']), \
+            f"first_month should be MM/YYYY, got {result['first_month']}"
+
+    def test_returns_none_if_saldo_extraction_fails(self):
+        """If SALDO extraction fails, should return None (not crash)."""
+        from extractor import detect_partial_history
+        import pandas as pd
+
+        # Create empty df to simulate extraction failure scenario
+        df_empty = pd.DataFrame({'cotas': [], 'valor_cota': []})
+
+        # Use a non-existent path to trigger extraction failure
+        result = detect_partial_history('nonexistent.pdf', df_empty)
+        assert result is None
+
+    def test_missing_cotas_matches_manual_calculation(self):
+        """missing_cotas should equal total_cotas - sum(df_raw['cotas'])."""
+        from extractor import detect_partial_history, _extract_saldo_total
+
+        assert SAMPLE_PDF.exists(), f"REQUIRED fixture: {SAMPLE_PDF}"
+        df_raw, _ = extract_data_from_pdf(str(SAMPLE_PDF))
+        result = detect_partial_history(str(SAMPLE_PDF), df_raw)
+
+        saldo = _extract_saldo_total(str(SAMPLE_PDF))
+        expected_missing = saldo['total_cotas'] - df_raw['cotas'].sum()
+
+        assert abs(result['missing_cotas'] - expected_missing) < 0.01, \
+            f"missing_cotas mismatch: {result['missing_cotas']} vs {expected_missing}"

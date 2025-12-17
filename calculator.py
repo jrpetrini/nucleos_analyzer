@@ -219,6 +219,12 @@ def apply_deflation(df_position: pd.DataFrame,
     df_pos['posicao'] = df_pos['posicao_real']
     df_pos = df_pos.drop(columns=['posicao_real'])
 
+    # Also deflate valor_cota if present (needed for partial PDF CAGR calculations)
+    if 'valor_cota' in df_pos.columns:
+        df_pos = deflate_series(df_pos, inflation_index, reference_date, 'valor_cota')
+        df_pos['valor_cota'] = df_pos['valor_cota_real']
+        df_pos = df_pos.drop(columns=['valor_cota_real'])
+
     # Deflate contributions
     df_contrib = df_contributions.copy()
     for col in ['contribuicao_total', 'contrib_participante', 'contrib_patrocinador']:

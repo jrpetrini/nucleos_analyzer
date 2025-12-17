@@ -2,20 +2,11 @@
 """
 PDF extraction and file selection utilities for Nucleos Analyzer.
 
-TODO: SALDO TOTAL Feature - Remaining Implementation
-======================================================
-Phase 4: Update UI with warning icon and Posição inicial
-- Add dcc.Store('pdf-metadata') to store extraction metadata
-- Add warning icon (⚠️) next to end-month dropdown for partial PDFs
-- Tooltip shows: starting_position, missing_cotas, period info
-- Show "Posição inicial em MM/YYYY: R$ X" in position box
-- Only visible when is_partial_history == True
-
-Phase 5: Handle contributions graph for partial PDFs
-- Cumulative invested curve starts from 0 (not starting_position)
-- Position curve starts from starting_position
-- Gap at start is informative (shows prior history exists)
-- XIRR uses only visible PDF contributions (not starting_position)
+SALDO TOTAL Feature - COMPLETE
+==============================
+- Phase 1-3: Core extraction and calculation
+- Phase 4: UI warning icon and "Posição inicial" display
+- Phase 5: Contributions graph (cumulative starts from 0, position includes starting_cotas)
 """
 
 import re
@@ -256,6 +247,68 @@ def _extract_rentabilidade_cota(file_path: str) -> dict | None:
                 rentabilidade[month_year] = cota_value
 
     return rentabilidade if rentabilidade else None
+
+
+PARTIAL_THRESHOLD = 0.1  # Missing cotas above this = partial history
+
+
+def detect_partial_history(file_path: str, df_raw: pd.DataFrame) -> dict | None:
+    """
+    Detect if a PDF contains partial history and calculate starting position.
+
+    Compares the total cotas from SALDO TOTAL section with the sum of cotas
+    in the transactions. If the difference exceeds PARTIAL_THRESHOLD, the
+    PDF is considered partial.
+
+    Args:
+        file_path: Path to the extratoIndividual.pdf file
+        df_raw: Raw transactions DataFrame with 'cotas' and 'valor_cota' columns
+
+    Returns:
+        Dict with keys:
+            - is_partial: bool - True if PDF has partial history
+            - missing_cotas: float - Number of cotas not in PDF transactions
+            - starting_position: float - Value of position before first PDF transaction
+            - first_month: str - First month in PDF in MM/YYYY format
+        Returns None if SALDO extraction fails
+    """
+    try:
+        saldo = _extract_saldo_total(file_path)
+    except (FileNotFoundError, Exception):
+        return None
+
+    if saldo is None:
+        return None
+
+    if df_raw.empty or 'cotas' not in df_raw.columns:
+        return None
+
+    sum_cotas = df_raw['cotas'].sum()
+    total_cotas = saldo['total_cotas']
+    missing_cotas = float(total_cotas - sum_cotas)
+
+    is_partial = bool(missing_cotas > PARTIAL_THRESHOLD)
+
+    # Calculate starting position (value of cotas before first transaction)
+    first_cota_value = df_raw['valor_cota'].iloc[0] if not df_raw.empty else 0
+    starting_position = float(missing_cotas * first_cota_value)
+
+    # Get first month from df_raw (convert to string if Timestamp)
+    if 'mes_ano' in df_raw.columns and not df_raw.empty:
+        first_month_raw = df_raw['mes_ano'].iloc[0]
+        if hasattr(first_month_raw, 'strftime'):
+            first_month = first_month_raw.strftime('%m/%Y')
+        else:
+            first_month = str(first_month_raw)
+    else:
+        first_month = '01/1900'  # Fallback
+
+    return {
+        'is_partial': is_partial,
+        'missing_cotas': missing_cotas,
+        'starting_position': starting_position,
+        'first_month': first_month,
+    }
 
 
 def _build_raw_dataframe(transactions: list[dict]) -> pd.DataFrame:
