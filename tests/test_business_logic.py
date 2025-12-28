@@ -252,8 +252,8 @@ class TestCalculateNucleosStats:
             company_as_mine=False, colors=colors
         )
 
-        # CAGR text should show positive percentage
-        assert '+' in result['cagr_text'] or 'N/A' in result['cagr_text']
+        # CAGR should be +14.69% a.a. for this fixture data
+        assert result['cagr_text'] == '+14.69% a.a.'
 
     def test_missing_cotas_zero_unchanged_behavior(self, sample_position, sample_contributions, colors):
         """Test that missing_cotas=0 gives same results as default."""

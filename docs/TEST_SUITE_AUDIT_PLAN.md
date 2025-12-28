@@ -89,6 +89,7 @@ tests/fixtures/api_responses/
 - [x] test_integration.py:664 - Final position (exact: 48813.06)
 - [x] test_calculator.py:268 - Deflation tolerance (< 0.001 = 0.1%)
 - [x] test_calculator.py:412 - CAGR (exact: 14.69%)
+- [x] test_business_logic.py:256 - CAGR format validation (exact: +14.69% a.a.)
 
 ### Phase 2 - API Hardcoding (COMPLETED)
 - [x] Create tests/fixtures/api_responses/ (6 JSON files)
