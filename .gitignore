@@ -16,3 +16,7 @@ old/
 
 # Claude Code
 .claude/
+
+# Test coverage
+.coverage
+htmlcov/

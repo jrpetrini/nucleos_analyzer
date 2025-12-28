@@ -265,7 +265,8 @@ class TestDeflateSeries:
         # First row should be nearly identical (same reference point)
         first_real = result.iloc[0]['posicao_real']
         first_nominal = result.iloc[0]['posicao']
-        assert abs(first_real - first_nominal) / first_nominal < 0.02  # Within 2%
+        assert abs(first_real - first_nominal) / first_nominal < 0.001, \
+            f"Same-date deflation should be < 0.1% diff, got {abs(first_real - first_nominal) / first_nominal:.4f}"
 
     def test_deflation_preserves_original_data(self, sample_position_data, sample_inflation_index):
         """Test that original posicao column is unchanged."""
@@ -406,6 +407,7 @@ class TestCalculateSummaryStats:
             monthly_contrib
         )
 
-        # CAGR should be a reasonable percentage (not None, not extreme)
+        # CAGR for sample fixtures (contributions on 15th, positions on month-end)
         assert stats['cagr_pct'] is not None
-        assert -50 < stats['cagr_pct'] < 100
+        assert abs(stats['cagr_pct'] - 14.69) < 0.01, \
+            f"Expected CAGR 14.69%, got {stats['cagr_pct']:.2f}%"

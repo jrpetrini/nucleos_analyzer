@@ -131,9 +131,9 @@ class TestDataConsistency:
         total_2024 = df_contrib_2024['contribuicao_total'].sum()
         total_from_full = df_contrib_2024_from_full['contribuicao_total'].sum()
 
-        # Allow small difference due to potential timing differences
-        assert abs(total_2024 - total_from_full) / total_2024 < 0.01, \
-            f"Contribution totals differ: {total_2024} vs {total_from_full}"
+        # Should match exactly (same PDF data for 2024)
+        assert abs(total_2024 - total_from_full) < 0.01, \
+            f"Contribution totals differ: {total_2024:.2f} vs {total_from_full:.2f}"
 
     def test_december_2024_cota_matches(self, data_2024_only, data_2023_to_2025):
         """Verify December 2024 cota value matches exactly between PDFs."""
@@ -289,10 +289,15 @@ class TestToggleCombinations:
         invested = float(invested_str)
 
         if company_toggle:
-            # With company as mine, invested should be only participant portion
+            # With company as mine, invested should be exactly participant portion
             total_participant = df_contrib['contrib_participante'].sum()
-            # Should be approximately participant only (roughly half)
-            assert invested < df_contrib['contribuicao_total'].sum() * 0.7
+            assert abs(invested - total_participant) < 0.01, \
+                f"Invested {invested:.2f} should equal participant total {total_participant:.2f}"
+        else:
+            # Without toggle, invested should be total contributions
+            total_all = df_contrib['contribuicao_total'].sum()
+            assert abs(invested - total_all) < 0.01, \
+                f"Invested {invested:.2f} should equal total {total_all:.2f}"
 
 
 class TestBenchmarkSimulation:
@@ -654,10 +659,10 @@ class TestRealWorldScenarios:
         df_pos, df_contrib = data_2024
 
         # Final position calculated from 2024 contributions only
+        # Known value: 48813.06 (from 2024 contributions × cota growth)
         final_pos = df_pos['posicao'].iloc[-1]
-        # Should be positive and reasonable
-        assert final_pos > 40000, f"Final position too low: {final_pos}"
-        assert final_pos < 60000, f"Final position too high: {final_pos}"
+        assert abs(final_pos - 48813.06) < 1.0, \
+            f"Final position expected 48813.06, got {final_pos:.2f}"
 
         # Known December 2024 cota value: 1.3493461878
         final_cota = df_pos['valor_cota'].iloc[-1]

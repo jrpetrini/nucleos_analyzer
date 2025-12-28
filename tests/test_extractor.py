@@ -86,12 +86,19 @@ class TestExtractDataFromPdf:
         assert unique_months >= 12, f"Expected at least 12 months, got {unique_months}"
 
     def test_cota_values_reasonable(self):
-        """Test that cota values are in reasonable range."""
+        """Test that cota values match known 2024 PDF values.
+
+        Known values from 2024 PDF:
+        - January 2024: 1.23418293
+        - December 2024: 1.3493461878
+        """
         df_raw, _ = extract_data_from_pdf(str(SAMPLE_PDF))
 
-        # Cota values for 2024 should be between 1.0 and 2.0
-        assert df_raw['valor_cota'].min() > 1.0
-        assert df_raw['valor_cota'].max() < 2.0
+        # Exact known values with tight tolerance
+        assert abs(df_raw['valor_cota'].min() - 1.23418293) < 0.0001, \
+            f"Min cota {df_raw['valor_cota'].min()} != expected 1.23418293"
+        assert abs(df_raw['valor_cota'].max() - 1.3493461878) < 0.0001, \
+            f"Max cota {df_raw['valor_cota'].max()} != expected 1.3493461878"
 
     def test_contributions_accumulate_correctly(self):
         """Test that cumulative contributions are calculated correctly."""
@@ -149,9 +156,9 @@ class TestExtractDataFromPdf:
             df_contributions['data'].dt.month == 1
         ]['contrib_participante'].iloc[0]
 
-        # Should be close to 3969.09 (allowing for small float differences)
-        assert abs(jan_2024 - 3969.09) < 1.0, \
-            f"January participant contribution should be ~3969.09, got {jan_2024}"
+        # Exact value with 1 cent tolerance
+        assert abs(jan_2024 - 3969.09) < 0.01, \
+            f"January participant contribution should be 3969.09, got {jan_2024}"
 
         # Check final cota value (December 2024)
         dec_2024_cotas = df_raw[
@@ -318,9 +325,14 @@ class TestExtractRentabilidadeCota:
         # Check last month (11/2025)
         assert '11/2025' in result, "Should have 11/2025"
 
-        # Verify cota values are reasonable (between 1.0 and 2.0)
-        for month, value in result.items():
-            assert 1.0 < value < 2.0, f"Cota {value} for {month} seems unreasonable"
+        # Verify cota values match known range for full PDF
+        # Known: Dec 2022 = 1.09541556, Nov 2025 = 1.513527049
+        min_cota = min(result.values())
+        max_cota = max(result.values())
+        assert abs(min_cota - 1.09541556) < 0.0001, \
+            f"Min cota {min_cota} != expected 1.09541556"
+        assert abs(max_cota - 1.513527049) < 0.0001, \
+            f"Max cota {max_cota} != expected 1.513527049"
 
     def test_extract_rentabilidade_2024_pdf(self):
         """Test RENTABILIDADE extraction from 2024 PDF."""

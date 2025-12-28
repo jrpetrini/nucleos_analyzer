@@ -80,14 +80,14 @@ These **cannot be reduced** - document why:
 
 ## Checklist
 
-### Phase 1 - Tighten Tolerances
-- [ ] test_extractor.py:66-67 - Cota range
-- [ ] test_extractor.py:126 - Contribution tolerance
-- [ ] test_integration.py:135 - Contribution comparison
-- [ ] test_integration.py:295 - Company toggle validation
-- [ ] test_integration.py:659-660 - Final position bounds
-- [ ] test_calculator.py:224 - Deflation tolerance
-- [ ] test_calculator.py:367 - CAGR range
+### Phase 1 - Tighten Tolerances (COMPLETED)
+- [x] test_extractor.py:93-94 - Cota range (exact: 1.23418293 to 1.3493461878)
+- [x] test_extractor.py:153 - Contribution tolerance (< 0.01 = 1 cent)
+- [x] test_integration.py:135 - Contribution comparison (< 0.01 absolute)
+- [x] test_integration.py:291-300 - Company toggle validation (exact match)
+- [x] test_integration.py:664 - Final position (exact: 48813.06)
+- [x] test_calculator.py:268 - Deflation tolerance (< 0.001 = 0.1%)
+- [x] test_calculator.py:412 - CAGR (exact: 14.69%)
 
 ### Phase 2 - API Hardcoding
 - [ ] Create tests/fixtures/api_responses/
