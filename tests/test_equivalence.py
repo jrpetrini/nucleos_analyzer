@@ -97,8 +97,6 @@ class TestEquivalence:
         end_date = '2024-12-31'
 
         # Get stats for full PDF filtered to 2024
-        # TODO: After refactor, missing_cotas should be calculated dynamically
-        # based on SALDO_TOTAL vs visible contributions
         stats_full_filtered = get_stats_for_range(
             df_pos_full, df_contrib_full, start_date, end_date
         )
@@ -266,7 +264,7 @@ class TestDynamicPartialDetection:
 
 
 # =============================================================================
-# COMBINATORIAL INTEGRATION TESTS - TODO PLAN
+# COMBINATORIAL INTEGRATION TESTS
 # =============================================================================
 #
 # These tests verify that filtering a larger PDF to a smaller PDF's date range
@@ -501,10 +499,8 @@ class TestCombinatorialIntegration:
         )
 
     # -------------------------------------------------------------------------
-    # TODO: PDF Pair 2 & 3 tests are commented out - position equivalence
-    # for partial PDFs needs a different approach. The inherent valor_cota
-    # difference between filtered full PDFs and directly loaded partial PDFs
-    # causes ~15-20% position differences that compound across rows.
+    # PDF Pair 2 & 3 tests commented out: partial PDF equivalence has inherent
+    # valor_cota differences (~15-20%) that require a different approach.
     # -------------------------------------------------------------------------
 
     # def test_pair2_toggle_A_no_company_no_inflation(self):

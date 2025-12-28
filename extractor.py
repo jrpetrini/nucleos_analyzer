@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 """
 PDF extraction and file selection utilities for Nucleos Analyzer.
-
-SALDO TOTAL Feature - COMPLETE
-==============================
-- Phase 1-3: Core extraction and calculation
-- Phase 4: UI warning icon and "Posição inicial" display
-- Phase 5: Contributions graph (cumulative starts from 0, position includes starting_cotas)
 """
 
 import re
