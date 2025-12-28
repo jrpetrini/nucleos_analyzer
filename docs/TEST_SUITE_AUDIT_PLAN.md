@@ -62,19 +62,20 @@ tests/fixtures/api_responses/
 
 ---
 
-## Phase 3: Document Inherent Tolerances
+## Phase 3: Tolerance Investigation & Fixes
 
-These **cannot be reduced** - document why:
+**5% tolerance (test_equivalence.py:409) - FIXED**:
+- Root cause: was using varying `missing_cotas × current_valor_cota` per month
+- Fix: use constant `missing_cotas × first_valor_cota` to match full PDF behavior
+- Result: difference is now constant ~R$ 188.90 (not growing 2.6% → 4.7%)
+- Changed from 5% relative tolerance to R$ 200 absolute tolerance
 
-**5% tolerance (test_equivalence.py:409)**:
-- Valor_cota changes month-to-month
-- Partial PDFs use first available cota, not historical
-- Example: 50,000 cotas × 1.348 (Dec) vs × 1.385 (Jan) = 2.7% diff
-
-**3% tolerance (test_integration.py:828)**:
+**3% tolerance (test_integration.py:834) - INHERENT**:
 - Partition boundary crosses cota value change
-- Position = cotas × valor_cota at month-end
-- Adjacent months differ ~1-2%
+- position_A_end = cotas_A × last_valor_cota_A
+- starting_position_B = cotas_A × first_valor_cota_B
+- Cannot know A's ending cota if only have B's data
+- 3% covers typical monthly cota change (~1%) with margin
 
 ---
 
@@ -99,13 +100,13 @@ These **cannot be reduced** - document why:
 - [x] Added @pytest.mark.slow to TestAPIAvailability
 - [x] Registered slow marker in pytest.ini
 
-### Phase 3 - Documentation
-- [ ] Document 5% tolerance in test_equivalence.py
-- [ ] Document 3% tolerance in test_integration.py
+### Phase 3 - Tolerance Investigation (COMPLETED)
+- [x] Fixed 5% tolerance bug → R$ 200 absolute (test_equivalence.py)
+- [x] Documented 3% as inherent (test_integration.py:834)
 
 ---
 
 ## Test Count After Changes
 
-- Current: 226 passed, 10 skipped, 1 flaky
-- After: 226+ passed, ~2 skipped (smoke tests), 0 flaky
+- Before: 226 passed, 10 skipped, 1 flaky
+- After: 232 passed, 0 skipped, 0 flaky

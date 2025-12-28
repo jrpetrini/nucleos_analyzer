@@ -406,19 +406,18 @@ class TestCombinatorialIntegration:
         return table_data
 
     @staticmethod
-    def compare_table_data(table1, table2, description="", position_tolerance_pct=5.0):
+    def compare_table_data(table1, table2, description="", position_tolerance_abs=200.0):
         """Compare two table data lists and return detailed diff if mismatch.
 
         Args:
             table1: First table data list
             table2: Second table data list
             description: Description for error messages
-            position_tolerance_pct: Tolerance percentage for 'posicao' column comparison.
-                                   Set to 5% to account for valor_cota differences:
-                                   - Full PDFs use position_before_start (actual value at prior month)
-                                   - Partial PDFs use missing_cotas × current_valor_cota
-                                   The ~3% difference is inherent to partial PDFs not having
-                                   historical valor_cota data.
+            position_tolerance_abs: Absolute tolerance in R$ for 'posicao' column.
+                                   Set to 200 to account for inherent valor_cota difference:
+                                   - Full PDFs subtract position_before_start (Dec cota value)
+                                   - Partial PDFs subtract missing_cotas × first_cota (Jan cota value)
+                                   - The ~188.90 R$ constant difference is due to cota value change
         """
         if len(table1) != len(table2):
             return False, f"{description}: Row count mismatch: {len(table1)} vs {len(table2)}"
@@ -429,8 +428,8 @@ class TestCombinatorialIntegration:
             for key in row1.keys():
                 val1, val2 = row1[key], row2[key]
 
-                # For position column, use tolerance comparison
-                if key == 'posicao' and position_tolerance_pct > 0:
+                # For position column, use absolute tolerance comparison
+                if key == 'posicao' and position_tolerance_abs > 0:
                     # Handle '-' (missing) values
                     if val1 == '-' and val2 == '-':
                         continue  # Both missing, consider equal
@@ -442,17 +441,12 @@ class TestCombinatorialIntegration:
                     num1 = float(re.sub(r'[^\d.-]', '', val1.replace(',', '')))
                     num2 = float(re.sub(r'[^\d.-]', '', val2.replace(',', '')))
 
-                    if num1 == 0 and num2 == 0:
-                        continue  # Both zero, consider equal
-
-                    max_val = max(abs(num1), abs(num2))
-                    if max_val > 0:
-                        pct_diff = abs(num1 - num2) / max_val * 100
-                        if pct_diff > position_tolerance_pct:
-                            return False, (
-                                f"{description}: Position mismatch at row {i}: "
-                                f"{val1} vs {val2} (diff: {pct_diff:.1f}% > {position_tolerance_pct}% tolerance)"
-                            )
+                    abs_diff = abs(num1 - num2)
+                    if abs_diff > position_tolerance_abs:
+                        return False, (
+                            f"{description}: Position mismatch at row {i}: "
+                            f"{val1} vs {val2} (diff: R$ {abs_diff:.2f} > R$ {position_tolerance_abs:.2f} tolerance)"
+                        )
                 elif val1 != val2:
                     return False, f"{description}: Value mismatch at row {i}, col '{key}': {val1} vs {val2}"
 
@@ -614,7 +608,7 @@ class TestCombinatorialIntegration:
     # -------------------------------------------------------------------------
 
     def _run_pair_test(self, larger_pdf, smaller_pdf, target_start, target_end,
-                       company_as_mine, inflation, position_tolerance_pct=5.0):
+                       company_as_mine, inflation, position_tolerance_abs=200.0):
         """
         Run a single pair test comparing larger PDF filtered vs smaller PDF directly.
         """
@@ -665,19 +659,22 @@ class TestCombinatorialIntegration:
         )
 
         # For partial PDFs at their start (no earlier data), subtract invisible portion
-        # This matches the fix in callbacks.py update_position_table
+        # Use FIRST valor_cota (constant) to match how full PDFs subtract a constant
+        # position_before_start. This makes both sides compute growth/delta consistently.
         if meta_larger.get('is_partial') and pos_before_larger == 0 and 'valor_cota' in df_pos_larger_filtered.columns:
+            first_cota_larger = df_pos_larger_filtered['valor_cota'].iloc[0]
             df_pos_larger_filtered = df_pos_larger_filtered.copy()
             df_pos_larger_filtered['posicao'] = (
                 df_pos_larger_filtered['posicao'] -
-                missing_cotas_larger * df_pos_larger_filtered['valor_cota']
+                missing_cotas_larger * first_cota_larger
             )
 
         if meta_smaller.get('is_partial') and pos_before_smaller == 0 and 'valor_cota' in df_pos_smaller_filtered.columns:
+            first_cota_smaller = df_pos_smaller_filtered['valor_cota'].iloc[0]
             df_pos_smaller_filtered = df_pos_smaller_filtered.copy()
             df_pos_smaller_filtered['posicao'] = (
                 df_pos_smaller_filtered['posicao'] -
-                missing_cotas_smaller * df_pos_smaller_filtered['valor_cota']
+                missing_cotas_smaller * first_cota_smaller
             )
 
         # Generate and compare position table data (now both show visible deltas)
@@ -694,7 +691,7 @@ class TestCombinatorialIntegration:
 
         match, msg = self.compare_table_data(
             pos_table_larger, pos_table_smaller, "Position table",
-            position_tolerance_pct=position_tolerance_pct
+            position_tolerance_abs=position_tolerance_abs
         )
         assert match, msg
 
