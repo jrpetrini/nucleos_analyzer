@@ -1,0 +1,98 @@
+[
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-01-01T00:00:00-03:00",
+    "VALVALOR": 0.97,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-01-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-02-01T00:00:00-03:00",
+    "VALVALOR": 0.8,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-02-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-03-01T00:00:00-03:00",
+    "VALVALOR": 0.83,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-03-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-04-01T00:00:00-03:00",
+    "VALVALOR": 0.89,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-04-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-05-01T00:00:00-03:00",
+    "VALVALOR": 0.83,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-05-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-06-01T00:00:00-03:00",
+    "VALVALOR": 0.79,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-06-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-07-01T00:00:00-03:00",
+    "VALVALOR": 0.91,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-07-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-08-01T00:00:00-03:00",
+    "VALVALOR": 0.87,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-08-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-09-01T00:00:00-03:00",
+    "VALVALOR": 0.84,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-09-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-10-01T00:00:00-03:00",
+    "VALVALOR": 0.93,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-10-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-11-01T00:00:00-03:00",
+    "VALVALOR": 0.79,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-11-01 03:00:00+00:00"
+  },
+  {
+    "SERCODIGO": "BM12_TJCDI12",
+    "VALDATA": "2024-12-01T00:00:00-03:00",
+    "VALVALOR": 0.93,
+    "NIVNOME": "",
+    "TERCODIGO": "",
+    "date": "2024-12-01 03:00:00+00:00"
+  }
+]

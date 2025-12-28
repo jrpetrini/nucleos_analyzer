@@ -89,14 +89,15 @@ These **cannot be reduced** - document why:
 - [x] test_calculator.py:268 - Deflation tolerance (< 0.001 = 0.1%)
 - [x] test_calculator.py:412 - CAGR (exact: 14.69%)
 
-### Phase 2 - API Hardcoding
-- [ ] Create tests/fixtures/api_responses/
-- [ ] Save BCB responses (IPCA, INPC, CDI)
-- [ ] Save IPEA responses (IPCA, INPC, CDI)
-- [ ] Refactor TestBCBLibraryVsDirectAPI
-- [ ] Refactor TestBCBvsIPEACrossValidation
-- [ ] Refactor TestDataIntegrity
-- [ ] Add @pytest.mark.slow to smoke tests
+### Phase 2 - API Hardcoding (COMPLETED)
+- [x] Create tests/fixtures/api_responses/ (6 JSON files)
+- [x] Save BCB responses (IPCA, INPC, CDI for 2024)
+- [x] Save IPEA responses (IPCA, INPC, CDI for 2024)
+- [x] Removed TestBCBLibraryVsDirectAPI (tested external library)
+- [x] Refactored TestBCBvsIPEACrossValidation (uses cached data)
+- [x] Refactored TestDataIntegrity (uses cached data)
+- [x] Added @pytest.mark.slow to TestAPIAvailability
+- [x] Registered slow marker in pytest.ini
 
 ### Phase 3 - Documentation
 - [ ] Document 5% tolerance in test_equivalence.py
