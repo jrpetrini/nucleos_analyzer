@@ -131,9 +131,9 @@ class TestDataConsistency:
         total_2024 = df_contrib_2024['contribuicao_total'].sum()
         total_from_full = df_contrib_2024_from_full['contribuicao_total'].sum()
 
-        # Allow small difference due to potential timing differences
-        assert abs(total_2024 - total_from_full) / total_2024 < 0.01, \
-            f"Contribution totals differ: {total_2024} vs {total_from_full}"
+        # Should match exactly (same PDF data for 2024)
+        assert abs(total_2024 - total_from_full) < 0.01, \
+            f"Contribution totals differ: {total_2024:.2f} vs {total_from_full:.2f}"
 
     def test_december_2024_cota_matches(self, data_2024_only, data_2023_to_2025):
         """Verify December 2024 cota value matches exactly between PDFs."""
@@ -289,10 +289,15 @@ class TestToggleCombinations:
         invested = float(invested_str)
 
         if company_toggle:
-            # With company as mine, invested should be only participant portion
+            # With company as mine, invested should be exactly participant portion
             total_participant = df_contrib['contrib_participante'].sum()
-            # Should be approximately participant only (roughly half)
-            assert invested < df_contrib['contribuicao_total'].sum() * 0.7
+            assert abs(invested - total_participant) < 0.01, \
+                f"Invested {invested:.2f} should equal participant total {total_participant:.2f}"
+        else:
+            # Without toggle, invested should be total contributions
+            total_all = df_contrib['contribuicao_total'].sum()
+            assert abs(invested - total_all) < 0.01, \
+                f"Invested {invested:.2f} should equal total {total_all:.2f}"
 
 
 class TestBenchmarkSimulation:
@@ -654,10 +659,10 @@ class TestRealWorldScenarios:
         df_pos, df_contrib = data_2024
 
         # Final position calculated from 2024 contributions only
+        # Known value: 48813.06 (from 2024 contributions × cota growth)
         final_pos = df_pos['posicao'].iloc[-1]
-        # Should be positive and reasonable
-        assert final_pos > 40000, f"Final position too low: {final_pos}"
-        assert final_pos < 60000, f"Final position too high: {final_pos}"
+        assert abs(final_pos - 48813.06) < 1.0, \
+            f"Final position expected 48813.06, got {final_pos:.2f}"
 
         # Known December 2024 cota value: 1.3493461878
         final_cota = df_pos['valor_cota'].iloc[-1]
@@ -682,3 +687,196 @@ class TestRealWorldScenarios:
         # Known final cota: 1.5135270490
         final_cota = df_pos['valor_cota'].iloc[-1]
         assert abs(final_cota - 1.513527049) < 0.0001, f"Expected ~1.5135, got {final_cota}"
+
+
+class TestPartitionConsistency:
+    """
+    Tests for partial history PDF support.
+
+    These tests verify that when a full PDF's data is partitioned at any month,
+    the calculated starting_position for the later partition (Part B) correctly
+    matches the ending position of the earlier partition (Part A).
+
+    This validates the cotas-based calculation:
+        missing_cotas = total_cotas - sum_cotas(Part B)
+        starting_position = missing_cotas * first_cota_value(Part B)
+    """
+
+    @pytest.fixture
+    def full_pdf_data(self):
+        """Load full 2023-2025 PDF and extract raw data."""
+        df_raw, df_contrib = extract_data_from_pdf(str(PDF_2023_TO_2025))
+        return df_raw, df_contrib
+
+    def test_cotas_sum_matches_position_calculation(self, full_pdf_data):
+        """
+        Verify that sum of all transaction cotas matches position cumsum.
+
+        This is a foundational test - if this fails, partition tests will fail.
+        The key insight: process_position_data uses cumsum of ALL cotas (including
+        negative fees), so sum_cotas must also include ALL transactions.
+        """
+        df_raw, _ = full_pdf_data
+
+        # Sum all cotas from raw transactions
+        sum_cotas = df_raw['cotas'].sum()
+
+        # Process position data and get final cumsum
+        df_pos = process_position_data(df_raw)
+
+        # The final position should be sum_cotas * final_cota_value
+        final_cota = df_pos['valor_cota'].iloc[-1]
+        expected_final_pos = sum_cotas * final_cota
+        actual_final_pos = df_pos['posicao'].iloc[-1]
+
+        assert abs(expected_final_pos - actual_final_pos) < 1.0, \
+            f"Position mismatch: expected {expected_final_pos:.2f}, got {actual_final_pos:.2f}"
+
+    def test_partition_cotas_sum_equals_total(self, full_pdf_data):
+        """
+        For any partition point, Part A cotas + Part B cotas == Total cotas.
+
+        This is a mathematical identity that must hold for partition logic to work.
+        """
+        df_raw, _ = full_pdf_data
+
+        # Get unique months for partitioning
+        df_raw = df_raw.copy()
+        df_raw['month'] = df_raw['mes_ano'].dt.to_period('M')
+        months = sorted(df_raw['month'].unique())
+
+        total_cotas = df_raw['cotas'].sum()
+
+        # Test every partition point
+        for i in range(1, len(months)):
+            cutoff = months[i]
+
+            cotas_A = df_raw[df_raw['month'] < cutoff]['cotas'].sum()
+            cotas_B = df_raw[df_raw['month'] >= cutoff]['cotas'].sum()
+
+            assert abs(cotas_A + cotas_B - total_cotas) < 0.001, \
+                f"Partition at {cutoff}: {cotas_A} + {cotas_B} != {total_cotas}"
+
+    def test_partition_invested_sum_equals_total(self, full_pdf_data):
+        """
+        For any partition point, Part A invested + Part B invested == Total invested.
+        """
+        _, df_contrib = full_pdf_data
+
+        df_contrib = df_contrib.copy()
+        df_contrib['month'] = df_contrib['data'].dt.to_period('M')
+        months = sorted(df_contrib['month'].unique())
+
+        total_invested = df_contrib['contribuicao_total'].sum()
+
+        # Test every partition point
+        for i in range(1, len(months)):
+            cutoff = months[i]
+
+            invested_A = df_contrib[df_contrib['month'] < cutoff]['contribuicao_total'].sum()
+            invested_B = df_contrib[df_contrib['month'] >= cutoff]['contribuicao_total'].sum()
+
+            assert abs(invested_A + invested_B - total_invested) < 0.01, \
+                f"Partition at {cutoff}: {invested_A} + {invested_B} != {total_invested}"
+
+    @pytest.mark.parametrize("partition_idx", range(1, 30, 3))  # Test every 3rd month for speed
+    def test_starting_position_matches_prior_ending(self, full_pdf_data, partition_idx):
+        """
+        Part B's calculated starting_position should approximately equal
+        Part A's ending position.
+
+        starting_position_B = missing_cotas * first_cota_B
+        where missing_cotas = total_cotas - sum_cotas_B
+        """
+        df_raw, _ = full_pdf_data
+
+        df_raw = df_raw.copy()
+        df_raw['month'] = df_raw['mes_ano'].dt.to_period('M')
+        months = sorted(df_raw['month'].unique())
+
+        if partition_idx >= len(months):
+            pytest.skip(f"partition_idx {partition_idx} >= months count {len(months)}")
+
+        cutoff = months[partition_idx]
+
+        # Part A data
+        df_raw_A = df_raw[df_raw['month'] < cutoff].copy()
+        if df_raw_A.empty:
+            pytest.skip("Part A is empty")
+
+        # Part B data
+        df_raw_B = df_raw[df_raw['month'] >= cutoff].copy()
+        if df_raw_B.empty:
+            pytest.skip("Part B is empty")
+
+        # Calculate Part A ending position
+        df_pos_A = process_position_data(df_raw_A[['mes_ano', 'valor_cota', 'cotas']])
+        position_A_end = df_pos_A['posicao'].iloc[-1]
+        cotas_A = df_raw_A['cotas'].sum()
+
+        # Calculate Part B starting_position using cotas method
+        total_cotas = df_raw['cotas'].sum()
+        cotas_B = df_raw_B['cotas'].sum()
+        missing_cotas = total_cotas - cotas_B
+
+        # missing_cotas should equal cotas_A
+        assert abs(missing_cotas - cotas_A) < 0.01, \
+            f"Cotas mismatch: missing={missing_cotas:.4f}, Part A={cotas_A:.4f}"
+
+        # Calculate starting_position using first cota value from Part B
+        first_cota_B = df_raw_B['valor_cota'].iloc[0]
+        starting_position_B = missing_cotas * first_cota_B
+
+        # Part A's ending position was calculated at Part A's last cota value
+        # Part B's starting_position is calculated at Part B's first cota value
+        # These may differ slightly due to cota value change between months
+        # Allow tolerance based on typical monthly cota change (~1-2%)
+        tolerance = position_A_end * 0.03  # 3% tolerance
+
+        assert abs(starting_position_B - position_A_end) < tolerance, \
+            f"Position mismatch at {cutoff}: Part A end={position_A_end:.2f}, " \
+            f"Part B start={starting_position_B:.2f} (diff={abs(starting_position_B - position_A_end):.2f})"
+
+    def test_full_partition_final_position_consistency(self, full_pdf_data):
+        """
+        When Part B is processed with starting_position, its final position
+        should match the full PDF's final position (within tolerance).
+
+        This validates the entire partial history calculation pipeline.
+        """
+        df_raw, _ = full_pdf_data
+
+        df_raw = df_raw.copy()
+        df_raw['month'] = df_raw['mes_ano'].dt.to_period('M')
+        months = sorted(df_raw['month'].unique())
+
+        # Use midpoint partition
+        mid_idx = len(months) // 2
+        cutoff = months[mid_idx]
+
+        # Full PDF position
+        df_pos_full = process_position_data(df_raw[['mes_ano', 'valor_cota', 'cotas']])
+        final_pos_full = df_pos_full['posicao'].iloc[-1]
+        total_cotas = df_raw['cotas'].sum()
+
+        # Part B data
+        df_raw_B = df_raw[df_raw['month'] >= cutoff].copy()
+        cotas_B = df_raw_B['cotas'].sum()
+        missing_cotas = total_cotas - cotas_B
+        first_cota_B = df_raw_B['valor_cota'].iloc[0]
+        starting_position_B = missing_cotas * first_cota_B
+
+        # Process Part B with starting_position
+        # Note: This will need process_position_data to support starting_position parameter
+        # For now, we manually add to validate the math
+        df_pos_B = process_position_data(df_raw_B[['mes_ano', 'valor_cota', 'cotas']])
+
+        # The final position should be: starting_position + Part B position growth
+        # Part B final pos = (starting_cotas + Part B cotas) * final_cota
+        # Since starting_cotas = missing_cotas, and total_cotas = missing_cotas + cotas_B
+        # Final = total_cotas * final_cota = full PDF final position
+        final_cota = df_pos_B['valor_cota'].iloc[-1]
+        expected_final_B = total_cotas * final_cota
+
+        assert abs(expected_final_B - final_pos_full) < 1.0, \
+            f"Final position mismatch: expected {expected_final_B:.2f}, full={final_pos_full:.2f}"

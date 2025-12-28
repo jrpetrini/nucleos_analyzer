@@ -155,7 +155,8 @@ def calculate_time_weighted_position(df_contrib: pd.DataFrame,
 
 def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
                             start_date: str, end_date: str,
-                            company_as_mine: bool, colors: dict) -> dict:
+                            company_as_mine: bool, colors: dict,
+                            missing_cotas: float = 0.0) -> dict:
     """
     Calculate Nucleos stats (position, invested, CAGR, return).
 
@@ -168,6 +169,7 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
         end_date: End date ISO string
         company_as_mine: Whether to treat company contributions as "free"
         colors: Color palette dictionary
+        missing_cotas: For partial PDFs, the number of cotas from prior history
 
     Returns:
         dict with keys: position_label, position_value, invested_value,
@@ -192,30 +194,63 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
     period_end = df_pos_filtered['data'].iloc[-1]
     end_position_original = df_pos_filtered['posicao'].iloc[-1] + position_before_start
 
+    # DYNAMIC PARTIAL DETECTION:
+    # When start date is changed (position_before_start > 0), calculate equivalent
+    # missing_cotas. This unifies behavior between:
+    # - Actual partial PDFs (missing_cotas from SALDO_TOTAL discrepancy)
+    # - Full PDFs with start date filter (equivalent missing_cotas from position_before_start)
+    #
+    # Note: position_before_start already INCLUDES the value of any existing missing_cotas.
+    # So cotas_before_start REPLACES missing_cotas, not adds to it.
+    if position_before_start > 0 and 'valor_cota' in df_pos.columns:
+        start_dt = df_pos_filtered['data'].iloc[0]
+        df_before = df_pos[df_pos['data'] < start_dt]
+        if not df_before.empty and 'valor_cota' in df_before.columns:
+            valor_cota_start = df_before['valor_cota'].iloc[-1]
+            # Cotas that existed before the filtered start date (includes any original missing_cotas)
+            cotas_before_start = position_before_start / valor_cota_start
+            # Replace missing_cotas - cotas_before_start already accounts for original missing_cotas
+            missing_cotas = cotas_before_start
+
+    # Exclude the value of invisible cotas from positions for CAGR calculation
+    # This applies to both partial PDFs and full PDFs with start date filter
+    if missing_cotas > 0 and 'valor_cota' in df_pos_filtered.columns:
+        valor_cota_end = df_pos_filtered['valor_cota'].iloc[-1]
+        invisible_position_end = missing_cotas * valor_cota_end
+
+        # Adjusted positions exclude invisible cotas
+        adjusted_end_position = end_position_original - invisible_position_end
+        adjusted_start_position = 0  # All invisible cotas are now accounted for in missing_cotas
+    else:
+        adjusted_end_position = end_position_original
+        adjusted_start_position = position_before_start
+        invisible_position_end = 0
+
     # Calculate time-weighted position for this period's contributions
     _, position_from_contributions = calculate_time_weighted_position(
         df_contrib_filtered,
-        start_position=position_before_start,
-        end_position=end_position_original,
+        start_position=adjusted_start_position,
+        end_position=adjusted_end_position,
         period_start=period_start,
         period_end=period_end,
         contribution_col=contrib_col
     )
 
-    # Position shows only what this period's contributions became (with their returns)
-    position_display = position_from_contributions
+    # Position card shows TOTAL position (what user actually has)
+    # This matches the graph and SALDO TOTAL from the PDF
+    position_display = end_position_original
 
-    # Total return = position from contributions minus what was invested
+    # Total return = what visible contributions grew to minus what was invested
+    # (For partial PDFs, this is the return on visible contributions only)
     total_return = position_from_contributions - total_invested_in_range
 
     # Calculate XIRR for the selected period
     amounts_for_xirr = df_contrib_filtered[contrib_col].tolist() if not df_contrib_filtered.empty else []
 
-    # Build cash flows: contributions (outflows) + what they became (inflow)
+    # Build cash flows: contributions (outflows) + final position of visible contributions (inflow)
     contrib_dates = df_contrib_filtered['data'].tolist() if not df_contrib_filtered.empty else []
     contrib_amounts = [-amt for amt in amounts_for_xirr]
 
-    # Use position_from_contributions as the final value (what contributions became)
     dates = contrib_dates + [period_end]
     amounts = contrib_amounts + [position_from_contributions]
 
@@ -235,9 +270,18 @@ def calculate_nucleos_stats(df_contrib: pd.DataFrame, df_pos: pd.DataFrame,
     # Format position label with end date
     position_label = f"Posição em {period_end.strftime('%m/%Y')}"
 
+    # Format invested label with date range
+    start_month_str = period_start.strftime('%m/%Y')
+    end_month_str = period_end.strftime('%m/%Y')
+    if start_month_str == end_month_str:
+        invested_label = f"Investido em {end_month_str}"
+    else:
+        invested_label = f"Investido de {start_month_str} a {end_month_str}"
+
     return {
         'position_label': position_label,
         'position_value': position_text,
+        'invested_label': invested_label,
         'invested_value': invested_text,
         'cagr_text': cagr_text,
         'cagr_style': {'color': cagr_color, 'margin': '0.5rem 0'},
@@ -251,6 +295,7 @@ def _empty_nucleos_stats(colors: dict) -> dict:
     return {
         'position_label': 'Posição',
         'position_value': 'R$ 0,00',
+        'invested_label': 'Total Investido',
         'invested_value': 'R$ 0,00',
         'cagr_text': 'N/A',
         'cagr_style': {'color': colors.get('text_muted', '#94a3b8'), 'margin': '0.5rem 0'},

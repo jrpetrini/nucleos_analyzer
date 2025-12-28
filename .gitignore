@@ -8,6 +8,7 @@ __pycache__/
 # Sensitive data
 old/
 *.pdf
+!tests/fixtures/*.pdf
 
 # IDE
 .idea/
@@ -15,3 +16,7 @@ old/
 
 # Claude Code
 .claude/
+
+# Test coverage
+.coverage
+htmlcov/

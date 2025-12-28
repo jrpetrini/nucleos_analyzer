@@ -135,7 +135,11 @@ def create_summary_cards() -> dcc.Loading:
                 html.Div([
                     html.P(id='position-label', children='Posição',
                            style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
-                    html.H2(id='current-position-value', style={'color': COLORS['primary'], 'margin': '0.5rem 0'})
+                    html.H2(id='current-position-value', style={'color': COLORS['primary'], 'margin': '0.5rem 0'}),
+                    # Starting position info (hidden by default, shown for partial PDFs)
+                    html.P(id='starting-position-info',
+                           style={'display': 'none', 'color': COLORS['text_muted'],
+                                  'margin': '0', 'fontSize': '0.75rem'})
                 ], style={
                     'backgroundColor': COLORS['card'],
                     'padding': '1.5rem',
@@ -146,7 +150,7 @@ def create_summary_cards() -> dcc.Loading:
                 # Total invested card
                 html.Div([
                     html.Div([
-                        html.P('Total Investido',
+                        html.P(id='invested-label', children='Total Investido',
                                style={'color': COLORS['text_muted'], 'margin': '0', 'fontSize': '0.875rem'}),
                     ]),
                     html.H2(id='total-invested-value', style={'color': COLORS['participant'], 'margin': '0.5rem 0'})
@@ -243,6 +247,30 @@ def create_date_controls(month_options: list, min_date, max_date, has_data: bool
                 clearable=False,
                 style={'width': '130px', 'color': '#000'}
             ),
+            # Partial PDF warning icon (hidden by default, uses same CSS as help icons)
+            html.Div([
+                html.Span('⚠️', className='help-icon', style={
+                    'fontSize': '16px', 'cursor': 'help', 'marginLeft': '8px'
+                }),
+                html.Div(
+                    'PDF com histórico parcial: este extrato não inclui todo o histórico de contribuições. '
+                    'A "Posição antes de" mostra o saldo estimado antes do primeiro mês do PDF (baseado no SALDO TOTAL). '
+                    'O gráfico mostra a posição ao final de cada mês. '
+                    'Os cálculos de CAGR e XIRR consideram a posição inicial + contribuições visíveis no PDF.',
+                    className='help-tooltip',
+                    style={
+                        'display': 'none', 'position': 'absolute',
+                        'backgroundColor': COLORS['card'], 'color': COLORS['text'],
+                        'padding': '10px 14px', 'borderRadius': '6px', 'fontSize': '13px',
+                        'minWidth': '280px', 'maxWidth': '400px', 'width': 'max-content',
+                        'zIndex': '1000', 'boxShadow': '0 4px 6px rgba(0, 0, 0, 0.3)',
+                        'top': '100%', 'left': '50%', 'transform': 'translateX(-50%)',
+                        'marginTop': '4px', 'whiteSpace': 'normal', 'lineHeight': '1.5',
+                    }
+                )
+            ], id='partial-pdf-warning', className='help-icon-container', style={
+                'display': 'none', 'position': 'relative', 'verticalAlign': 'middle'
+            }),
             # PDF Upload
             dcc.Loading(
                 id='loading-pdf-upload',
@@ -486,7 +514,8 @@ def create_contributions_tab(contributions_fig) -> html.Div:
 def create_data_stores(position_data: list, contributions_data: list,
                        contributions_monthly_data: list, has_data: bool,
                        start_date_str: str, end_date_str: str,
-                       stats: dict, month_options: list) -> list:
+                       stats: dict, month_options: list,
+                       pdf_metadata: dict = None) -> list:
     """Create all the dcc.Store components for data storage."""
     return [
         # Display versions (may be deflated)
@@ -502,6 +531,8 @@ def create_data_stores(position_data: list, contributions_data: list,
         dcc.Store(id='benchmark-cache', data={}),
         dcc.Store(id='stats-data', data=stats),
         dcc.Store(id='month-options', data=month_options),
+        # PDF metadata (partial history detection)
+        dcc.Store(id='pdf-metadata', data=pdf_metadata or {}),
     ]
 
 

@@ -72,18 +72,20 @@ def xirr_bizdays(dates: list, amounts: list) -> float | None:
             return None
 
 
-def process_position_data(df_raw: pd.DataFrame) -> pd.DataFrame:
+def process_position_data(df_raw: pd.DataFrame, starting_cotas: float = 0) -> pd.DataFrame:
     """
     Process raw transaction data to get monthly positions.
 
     Args:
         df_raw: Raw dataframe from extract_data_from_pdf
+        starting_cotas: Number of cotas held before the first transaction in df_raw.
+                       Used for partial PDFs where prior history is not included.
 
     Returns:
         DataFrame with monthly position data (data, cotas, posicao, valor_cota)
     """
     df = df_raw.copy(deep=True)
-    df['cotas_cumsum'] = df['cotas'].cumsum()
+    df['cotas_cumsum'] = df['cotas'].cumsum() + starting_cotas
     df['posicao'] = df['cotas_cumsum'] * df['valor_cota']
 
     df = (
@@ -216,6 +218,12 @@ def apply_deflation(df_position: pd.DataFrame,
     df_pos = deflate_series(df_position, inflation_index, reference_date, 'posicao')
     df_pos['posicao'] = df_pos['posicao_real']
     df_pos = df_pos.drop(columns=['posicao_real'])
+
+    # Also deflate valor_cota if present (needed for partial PDF CAGR calculations)
+    if 'valor_cota' in df_pos.columns:
+        df_pos = deflate_series(df_pos, inflation_index, reference_date, 'valor_cota')
+        df_pos['valor_cota'] = df_pos['valor_cota_real']
+        df_pos = df_pos.drop(columns=['valor_cota_real'])
 
     # Deflate contributions
     df_contrib = df_contributions.copy()
