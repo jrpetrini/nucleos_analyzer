@@ -56,13 +56,13 @@ BUTTON_DANGER_STYLE = {
     'backgroundColor': COLORS['danger'],
 }
 
-# Benchmark colors
+# Benchmark colors (all red for visual consistency)
 BENCHMARK_COLORS = {
-    'CDI': '#22c55e',          # Green
+    'CDI': '#ef4444',          # Red
     'IPCA': '#ef4444',         # Red
-    'INPC': '#f97316',         # Orange
-    'S&P 500': '#3b82f6',      # Blue
-    'USD': '#a855f7',          # Purple
+    'INPC': '#ef4444',         # Red
+    'S&P 500': '#ef4444',      # Red
+    'USD': '#ef4444',          # Red
 }
 
 # Overhead options
