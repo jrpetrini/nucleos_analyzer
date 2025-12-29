@@ -16,7 +16,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check for changes in last 24h
+        id: changes
+        run: |
+          if git log --since="24 hours ago" --oneline | grep -q .; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes in last 24 hours, skipping deployment"
+          fi
+
       - name: Push to HuggingFace Spaces
+        if: steps.changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
