@@ -46,7 +46,7 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             name='Nucleos',
             line=dict(color=COLORS['primary'], width=3),
             marker=dict(size=8, color=COLORS['primary']),
-            hovertemplate='<b>%{x|%b %Y}</b><br>Nucleos: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
 
     # Nucleos forecast (dashed line)
@@ -63,9 +63,9 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             x=forecast_x,
             y=forecast_y,
             mode='lines',
-            name='Nucleos (projeção)',
+            name='Nucleos (proj.)',
             line=dict(color=COLORS['primary'], width=2, dash='dash'),
-            hovertemplate='<b>%{x|%b %Y}</b><br>Projeção: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
 
     # Add benchmark curve if available (historical)
@@ -81,7 +81,7 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             name=benchmark_label,
             line=dict(color=color, width=2),
             marker=dict(size=5, color=color),
-            hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{benchmark_label}: R$ %{{y:,.2f}}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
 
     # Benchmark forecast (dashed line)
@@ -101,42 +101,45 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
                 x=forecast_x,
                 y=forecast_y,
                 mode='lines',
-                name=f'{benchmark_label} (projeção)',
+                name=f'{benchmark_label} (proj.)',
                 line=dict(color=color, width=2, dash='dash'),
-                hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{benchmark_label} proj: R$ %{{y:,.2f}}<extra></extra>'
+                hovertemplate='R$ %{y:,.0f}<extra></extra>'
             ))
 
     fig.update_layout(
-        title=dict(
-            text='Evolução da Posição',
-            font=dict(size=24, color=COLORS['text']),
-            x=0.5
-        ),
+        title=None,  # Remove title - graph purpose is clear from context
         xaxis=dict(
-            title=dict(text='Mês Fechamento', font=dict(color=COLORS['text'])),
+            title=None,
             gridcolor=COLORS['grid'],
-            tickfont=dict(color=COLORS['text_muted']),
-            tickformat='%b %Y',
-            ticklabelmode='period'
+            tickfont=dict(color=COLORS['text_muted'], size=10),
+            tickformat='%b %y',  # Shorter: "Jan 23" instead of "Jan 2023"
+            ticklabelmode='period',
+            nticks=5  # Fewer ticks on mobile
         ),
         yaxis=dict(
-            title=dict(text='Posição (R$)', font=dict(color=COLORS['text'])),
+            title=None,
             type='log' if log_scale else 'linear',
             gridcolor=COLORS['grid'],
-            tickfont=dict(color=COLORS['text_muted']),
-            tickformat=',.0f'
+            showticklabels=False,
         ),
         plot_bgcolor=COLORS['card'],
         paper_bgcolor=COLORS['background'],
         hovermode='x unified',
-        margin=dict(l=80, r=40, t=80, b=60),
+        hoverlabel=dict(
+            font_size=14,
+            bgcolor=COLORS['card'],
+        ),
+        autosize=True,
+        margin=dict(l=0, r=0, t=10, b=20),
         legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1.02,
-            xanchor='center',
-            x=0.5,
-            font=dict(color=COLORS['text'])
+            orientation='v',
+            yanchor='top',
+            y=0.99,
+            xanchor='left',
+            x=0.01,
+            font=dict(color=COLORS['text'], size=14),
+            bgcolor='rgba(30, 41, 59, 0.8)',
+            borderwidth=0,
         )
     )
 
@@ -172,16 +175,16 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         fig.add_trace(go.Bar(
             x=df_contributions['data'],
             y=df_contributions['contrib_participante'],
-            name='Participante',
+            name='Meu aporte',
             marker_color=COLORS['participant'],
-            hovertemplate='<b>%{x|%b %Y}</b><br>Participante: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
         fig.add_trace(go.Bar(
             x=df_contributions['data'],
             y=df_contributions['contrib_patrocinador'],
-            name='Patrocinador',
+            name='Aporte empresa',
             marker_color=COLORS['sponsor'],
-            hovertemplate='<b>%{x|%b %Y}</b><br>Patrocinador: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
         fig.update_layout(barmode='stack')
     else:
@@ -189,9 +192,9 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         fig.add_trace(go.Bar(
             x=df_contributions['data'],
             y=df_contributions['contribuicao_total'],
-            name='Contribuição Mensal',
+            name='Aporte',
             marker_color=COLORS['participant'],
-            hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
 
     # Add cumulative invested line
@@ -207,11 +210,11 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         x=df_contributions['data'],
         y=invested_cumsum,
         mode='lines+markers',
-        name=invested_label,
+        name='Eu investi',
         line=dict(color=COLORS['accent'], width=3),
         marker=dict(size=6),
         yaxis='y2',
-        hovertemplate='<b>%{x|%b %Y}</b><br>' + invested_label + ': R$ %{y:,.2f}<extra></extra>'
+        hovertemplate='R$ %{y:,.0f}<extra></extra>'
     ))
 
     # When show_split is ON, add a separate curve for total contributions
@@ -221,11 +224,11 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             x=df_contributions['data'],
             y=total_cumsum,
             mode='lines+markers',
-            name='Contribuição Total',
+            name='Investido',
             line=dict(color=COLORS['sponsor'], width=2),
             marker=dict(size=5),
             yaxis='y2',
-            hovertemplate='<b>%{x|%b %Y}</b><br>Contribuição Total: R$ %{y:,.2f}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
 
     # Add position curve (already adjusted relative to start of range)
@@ -240,47 +243,49 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             line=dict(color=COLORS['primary'], width=3),
             marker=dict(size=6),
             yaxis='y2',
-            hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{position_label}: R$ %{{y:,.2f}}<extra></extra>'
+            hovertemplate='R$ %{y:,.0f}<extra></extra>'
         ))
 
     fig.update_layout(
-        title=dict(
-            text='Contribuições Mensais',
-            font=dict(size=24, color=COLORS['text']),
-            x=0.5
-        ),
+        title=None,  # Remove title
         xaxis=dict(
-            title=dict(text='Mês Fechamento', font=dict(color=COLORS['text'])),
+            title=None,
             gridcolor=COLORS['grid'],
-            tickfont=dict(color=COLORS['text_muted']),
-            tickformat='%b %Y',
-            ticklabelmode='period'
+            tickfont=dict(color=COLORS['text_muted'], size=10),
+            tickformat='%b %y',
+            ticklabelmode='period',
+            nticks=5
         ),
         yaxis=dict(
-            title=dict(text='Contribuição Mensal (R$)', font=dict(color=COLORS['text'])),
+            title=None,
             gridcolor=COLORS['grid'],
-            tickfont=dict(color=COLORS['text_muted']),
-            tickformat=',.0f'
+            showticklabels=False,
         ),
         yaxis2=dict(
-            title=dict(text='Valor (R$)', font=dict(color=COLORS['text'])),
+            title=None,
             overlaying='y',
             side='right',
-            tickfont=dict(color=COLORS['text_muted']),
-            tickformat=',.0f',
-            showgrid=False
+            showticklabels=False,
+            showgrid=False,
         ),
         plot_bgcolor=COLORS['card'],
         paper_bgcolor=COLORS['background'],
         hovermode='x unified',
-        margin=dict(l=80, r=80, t=80, b=60),
+        hoverlabel=dict(
+            font_size=14,
+            bgcolor=COLORS['card'],
+        ),
+        autosize=True,
+        margin=dict(l=0, r=0, t=10, b=20),
         legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1.02,
-            xanchor='center',
-            x=0.5,
-            font=dict(color=COLORS['text'])
+            orientation='v',
+            yanchor='top',
+            y=0.99,
+            xanchor='left',
+            x=0.01,
+            font=dict(color=COLORS['text'], size=14),
+            bgcolor='rgba(30, 41, 59, 0.8)',
+            borderwidth=0,
         )
     )
 

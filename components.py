@@ -178,9 +178,14 @@ def create_summary_card(card_id: str, label: str, value_id: str,
 
 
 def create_dropdown_with_label(label: str, dropdown_id: str, options: list,
-                               value, width: str = '130px',
+                               value, size: str = 'md',
                                help_text: str = None) -> list:
-    """Create a labeled dropdown with optional help icon."""
+    """Create a labeled dropdown with optional help icon.
+
+    Args:
+        size: 'sm', 'md', or 'lg' for dropdown width class
+    """
+    size_class = f'dropdown-{size}'
     components = [
         html.Label(label, style={'color': COLORS['text'], 'marginRight': '0.5rem'}),
         dcc.Dropdown(
@@ -188,7 +193,8 @@ def create_dropdown_with_label(label: str, dropdown_id: str, options: list,
             options=options,
             value=value,
             clearable=False,
-            style={'width': width, 'color': '#000'}
+            className=size_class,
+            style={'color': '#000'}
         )
     ]
     if help_text:
@@ -207,18 +213,15 @@ def create_export_controls(export_format_id: str, export_btn_id: str) -> html.Di
             ],
             value='csv',
             clearable=False,
-            style={'width': '100px', 'color': '#000'}
+            className='dropdown-sm',
+            style={'color': '#000'}
         ),
-        html.Button('Exportar', id=export_btn_id, style={
+        html.Button('Exportar', id=export_btn_id, className='btn-primary', style={
             'backgroundColor': COLORS['primary'],
             'color': COLORS['text'],
-            'border': 'none',
-            'borderRadius': '0.5rem',
-            'padding': '0.5rem 1rem',
-            'cursor': 'pointer',
             'marginLeft': '0.5rem'
         }),
-    ], style={'display': 'flex', 'alignItems': 'center'})
+    ], className='export-controls')
 
 
 def create_data_table_styles() -> dict:

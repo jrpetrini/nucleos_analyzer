@@ -37,6 +37,8 @@ def create_app(df_position: pd.DataFrame = None,
     Returns:
         Configured Dash application
     """
+    from dash import Input, Output, ClientsideFunction
+
     app = Dash(__name__, suppress_callback_exceptions=True)
 
     # Create the layout
@@ -44,5 +46,25 @@ def create_app(df_position: pd.DataFrame = None,
 
     # Register all callbacks
     register_callbacks(app)
+
+    # Clientside callback to scroll settings panel to top when opened
+    app.clientside_callback(
+        """
+        function(isOpen) {
+            if (isOpen) {
+                setTimeout(function() {
+                    var content = document.getElementById('settings-content');
+                    if (content) {
+                        content.scrollTop = 0;
+                    }
+                }, 50);
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output('settings-content', 'data-scroll', allow_duplicate=True),
+        Input('settings-panel-open', 'data'),
+        prevent_initial_call=True
+    )
 
     return app

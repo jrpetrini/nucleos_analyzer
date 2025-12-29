@@ -59,16 +59,14 @@ def register_callbacks(app):
         is_enabled = 'adjust' in (inflation_toggle or [])
 
         if is_enabled:
-            dropdown_style = {'width': '100px', 'color': '#000'}
-            ref_dropdown_style = {'width': '130px', 'color': '#000'}
-            label_style = {'color': COLORS['text'], 'marginLeft': '1rem'}
+            dropdown_style = {'color': '#000'}
+            label_style = {'color': COLORS['text'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}
         else:
-            dropdown_style = {'width': '100px', 'color': '#000', 'opacity': '0.5'}
-            ref_dropdown_style = {'width': '130px', 'color': '#000', 'opacity': '0.5'}
-            label_style = {'color': COLORS['text_muted'], 'marginLeft': '1rem'}
+            dropdown_style = {'color': '#000', 'opacity': '0.5'}
+            label_style = {'color': COLORS['text_muted'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}
 
         return (not is_enabled, not is_enabled,
-                dropdown_style, ref_dropdown_style,
+                dropdown_style, dropdown_style,
                 label_style, label_style)
 
     @callback(
@@ -85,16 +83,14 @@ def register_callbacks(app):
         is_enabled = 'enabled' in (forecast_toggle or [])
 
         if is_enabled:
-            years_style = {'width': '100px', 'color': '#000'}
-            growth_style = {'width': '150px', 'color': '#000'}
-            label_style = {'color': COLORS['text'], 'marginLeft': '1rem'}
+            dropdown_style = {'color': '#000'}
+            label_style = {'color': COLORS['text'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}
         else:
-            years_style = {'width': '100px', 'color': '#000', 'opacity': '0.5'}
-            growth_style = {'width': '150px', 'color': '#000', 'opacity': '0.5'}
-            label_style = {'color': COLORS['text_muted'], 'marginLeft': '1rem'}
+            dropdown_style = {'color': '#000', 'opacity': '0.5'}
+            label_style = {'color': COLORS['text_muted'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}
 
-        return (not is_enabled, years_style, label_style,
-                not is_enabled, growth_style, label_style)
+        return (not is_enabled, dropdown_style, label_style,
+                not is_enabled, dropdown_style, label_style)
 
     @callback(
         Output('inflation-reference-month', 'options'),
@@ -666,13 +662,14 @@ def register_callbacks(app):
     def update_upload_button_style(data_loaded):
         """Update upload button color: amber when empty, primary when loaded."""
         base_style = {
-            'marginLeft': '2rem',
-            'padding': '0.5rem 1rem',
+            'width': '100%',
+            'textAlign': 'center',
+            'padding': '0.75rem 1rem',
             'color': COLORS['text'],
             'border': 'none',
             'borderRadius': '0.5rem',
             'cursor': 'pointer',
-            'display': 'inline-block'
+            'marginBottom': '1rem',
         }
         if data_loaded:
             base_style['backgroundColor'] = COLORS['primary']
@@ -687,11 +684,12 @@ def register_callbacks(app):
     def update_partial_warning(pdf_metadata):
         """Show/hide partial PDF warning icon based on metadata."""
         base_style = {
-            'position': 'relative',
-            'verticalAlign': 'middle'
+            'marginTop': '0.5rem',
+            'display': 'flex',
+            'alignItems': 'center',
         }
         if pdf_metadata and pdf_metadata.get('is_partial'):
-            base_style['display'] = 'inline-block'
+            base_style['display'] = 'flex'
         else:
             base_style['display'] = 'none'
         return base_style
@@ -1162,3 +1160,123 @@ def register_callbacks(app):
             return dcc.send_data_frame(df.to_csv, 'nucleos_projecao.csv', index=False)
         else:
             return dcc.send_data_frame(df.to_excel, 'nucleos_projecao.xlsx', index=False, engine='openpyxl')
+
+    @callback(
+        Output('settings-panel', 'style'),
+        Output('settings-overlay', 'style'),
+        Output('settings-panel-open', 'data'),
+        Output('settings-content', 'style'),
+        Input('settings-btn', 'n_clicks'),
+        Input('settings-close-btn', 'n_clicks'),
+        Input('settings-ok-btn', 'n_clicks'),
+        Input('settings-overlay', 'n_clicks'),
+        State('settings-panel-open', 'data'),
+        prevent_initial_call=True
+    )
+    def toggle_settings_panel(open_clicks, close_clicks, ok_clicks, overlay_clicks, is_open):
+        """Toggle the settings panel visibility."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise dash.exceptions.PreventUpdate
+
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        # Determine new state
+        if trigger_id == 'settings-btn':
+            new_is_open = not is_open
+        elif trigger_id in ['settings-close-btn', 'settings-ok-btn', 'settings-overlay']:
+            new_is_open = False
+        else:
+            new_is_open = is_open
+
+        # Panel style
+        panel_base_style = {
+            'position': 'fixed',
+            'top': '0',
+            'right': '0',
+            'width': '320px',
+            'height': '100vh',
+            'backgroundColor': COLORS['background'],
+            'boxShadow': '-4px 0 20px rgba(0, 0, 0, 0.3)',
+            'transition': 'transform 0.3s ease',
+            'zIndex': '1000',
+            'display': 'flex',
+            'flexDirection': 'column',
+        }
+
+        if new_is_open:
+            panel_base_style['transform'] = 'translateX(0)'
+        else:
+            panel_base_style['transform'] = 'translateX(100%)'
+
+        # Overlay style
+        overlay_style = {
+            'position': 'fixed',
+            'top': '0',
+            'left': '0',
+            'right': '0',
+            'bottom': '0',
+            'backgroundColor': 'rgba(0, 0, 0, 0.5)',
+            'zIndex': '999',
+            'display': 'block' if new_is_open else 'none',
+        }
+
+        # Content style - force scroll to top when opening by changing a property
+        content_style = {
+            'padding': '1.25rem',
+            'overflowY': 'auto',
+            'flex': '1',
+        }
+
+        return panel_base_style, overlay_style, new_is_open, content_style
+
+    @callback(
+        Output('settings-panel', 'style', allow_duplicate=True),
+        Output('settings-overlay', 'style', allow_duplicate=True),
+        Output('settings-panel-open', 'data', allow_duplicate=True),
+        Output('settings-content', 'style', allow_duplicate=True),
+        Input('settings-panel-open', 'data'),
+        prevent_initial_call='initial_duplicate'
+    )
+    def sync_settings_panel_on_load(is_open):
+        """Sync settings panel state on page load."""
+        # Panel style
+        panel_base_style = {
+            'position': 'fixed',
+            'top': '0',
+            'right': '0',
+            'width': '320px',
+            'height': '100vh',
+            'backgroundColor': COLORS['background'],
+            'boxShadow': '-4px 0 20px rgba(0, 0, 0, 0.3)',
+            'transition': 'transform 0.3s ease',
+            'zIndex': '1000',
+            'display': 'flex',
+            'flexDirection': 'column',
+        }
+
+        if is_open:
+            panel_base_style['transform'] = 'translateX(0)'
+        else:
+            panel_base_style['transform'] = 'translateX(100%)'
+
+        # Overlay style
+        overlay_style = {
+            'position': 'fixed',
+            'top': '0',
+            'left': '0',
+            'right': '0',
+            'bottom': '0',
+            'backgroundColor': 'rgba(0, 0, 0, 0.5)',
+            'zIndex': '999',
+            'display': 'block' if is_open else 'none',
+        }
+
+        # Content style
+        content_style = {
+            'padding': '1.25rem',
+            'overflowY': 'auto',
+            'flex': '1',
+        }
+
+        return panel_base_style, overlay_style, is_open, content_style

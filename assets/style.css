@@ -1,4 +1,120 @@
-/* Hover tooltip styles */
+/* =============================================================================
+   Nucleos Analyzer - Responsive Stylesheet
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   CSS Custom Properties (Design Tokens)
+   ----------------------------------------------------------------------------- */
+:root {
+    /* Spacing */
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+
+    /* Container padding - responsive */
+    --container-padding: 2rem;
+
+    /* Dropdown widths */
+    --dropdown-sm: 100px;
+    --dropdown-md: 130px;
+    --dropdown-lg: 150px;
+
+    /* Graph height */
+    --graph-height: 500px;
+
+    /* Title size */
+    --title-size: 2.5rem;
+
+    /* Card min-width for wrapping */
+    --card-min-width: 200px;
+}
+
+/* -----------------------------------------------------------------------------
+   Settings Panel
+   ----------------------------------------------------------------------------- */
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    overflow-y: auto;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-panel.open {
+    transform: translateX(0);
+}
+
+.settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    z-index: 999;
+}
+
+.settings-header {
+    flex-shrink: 0;
+}
+
+.settings-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.settings-section-title {
+    text-transform: uppercase;
+}
+
+/* Settings panel dropdowns - full width */
+.dropdown-settings {
+    width: 100%;
+}
+
+/* Fix dropdown menus being cut off in settings panel */
+.settings-panel .Select-menu-outer,
+.settings-panel .VirtualizedSelectMenu {
+    z-index: 1100 !important;
+    max-height: 40vh !important;
+}
+
+/* Ensure settings content doesn't clip dropdowns */
+.settings-content {
+    overflow-x: visible !important;
+}
+
+/* Settings panel upload button - prevent overflow */
+.upload-btn-settings {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Settings button hover effect */
+.settings-btn:hover {
+    opacity: 1 !important;
+    transform: rotate(30deg);
+    transition: transform 0.2s ease;
+}
+
+/* OK button hover effect */
+#settings-ok-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* -----------------------------------------------------------------------------
+   Help Icon Tooltips
+   ----------------------------------------------------------------------------- */
 .help-icon-container:hover .help-tooltip {
     display: block !important;
 }
@@ -6,4 +122,580 @@
 .help-icon:hover {
     background-color: #475569 !important;
     color: #f1f5f9 !important;
+}
+
+/* Tooltip positioning - constrain to viewport */
+.help-tooltip {
+    /* Prevent overflow on right edge */
+    max-width: min(400px, calc(100vw - 2rem)) !important;
+}
+
+/* Mobile tooltip fix - contained modal-style at bottom */
+@media (max-width: 600px) {
+    .help-tooltip {
+        position: fixed !important;
+        left: 1rem !important;
+        right: 1rem !important;
+        bottom: 1rem !important;
+        top: auto !important;
+        transform: none !important;
+        width: auto !important;
+        max-width: none !important;
+        max-height: 40vh !important;
+        overflow-y: auto !important;
+        z-index: 9999 !important;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5) !important;
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Base Layout
+   ----------------------------------------------------------------------------- */
+.page-container {
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
+/* -----------------------------------------------------------------------------
+   Header
+   ----------------------------------------------------------------------------- */
+.header {
+    text-align: center;
+    padding: var(--container-padding);
+    position: relative;
+}
+
+.header-title {
+    margin-bottom: 0;
+    font-size: var(--title-size);
+}
+
+.github-link {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+/* -----------------------------------------------------------------------------
+   Summary Cards
+   ----------------------------------------------------------------------------- */
+.summary-cards-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    padding: 0 var(--container-padding);
+    margin-bottom: var(--spacing-lg);
+}
+
+.summary-card {
+    flex: 1 1 var(--card-min-width);
+    min-width: var(--card-min-width);
+    text-align: center;
+    padding: var(--spacing-md);
+    border-radius: 0.75rem;
+}
+
+/* -----------------------------------------------------------------------------
+   Control Rows (date controls, benchmark, forecast, etc.)
+   ----------------------------------------------------------------------------- */
+.control-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: 0 var(--container-padding) var(--spacing-sm);
+}
+
+.control-row-center {
+    justify-content: center;
+}
+
+.control-row-start {
+    justify-content: flex-start;
+}
+
+/* -----------------------------------------------------------------------------
+   Dropdowns - Flexible sizing
+   ----------------------------------------------------------------------------- */
+.dropdown-sm {
+    min-width: 120px !important;
+    width: 120px !important;
+    flex: 0 0 auto;
+}
+
+/* Ensure export dropdowns have enough space */
+.export-controls .dropdown-sm {
+    min-width: 100px !important;
+    width: 100px !important;
+}
+
+.dropdown-md {
+    min-width: 100px;
+    max-width: 150px;
+    flex: 0 1 auto;
+}
+
+.dropdown-lg {
+    min-width: 120px;
+    max-width: 180px;
+    flex: 0 1 auto;
+}
+
+/* Allow dropdowns to shrink on mobile */
+.Select {
+    min-width: 0 !important;
+}
+
+/* -----------------------------------------------------------------------------
+   Graphs
+   ----------------------------------------------------------------------------- */
+.graph-container {
+    width: 100%;
+    min-height: 300px;
+}
+
+/* Plotly graphs - ensure responsiveness */
+.js-plotly-plot, .plotly {
+    width: 100% !important;
+}
+
+/* -----------------------------------------------------------------------------
+   Tab Content
+   ----------------------------------------------------------------------------- */
+.tab-content {
+    padding: var(--container-padding);
+    padding-top: 0;
+    min-height: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   Hide Plotly Modebar globally
+   ----------------------------------------------------------------------------- */
+.modebar {
+    display: none !important;
+}
+
+/* -----------------------------------------------------------------------------
+   Data Tables
+   ----------------------------------------------------------------------------- */
+.table-header-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.table-title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.export-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+/* Make data tables scrollable with visual indicator */
+.dash-table-container {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 50vh;
+    position: relative;
+}
+
+/* Scroll shadow indicators for tables */
+.dash-spreadsheet-container {
+    position: relative;
+}
+
+/* Bottom fade to hint more content below */
+.dash-table-container::after {
+    content: '';
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: linear-gradient(transparent, rgba(15, 23, 42, 0.9));
+    pointer-events: none;
+    display: block;
+}
+
+/* Table wrapper for scroll hint */
+.table-section {
+    position: relative;
+}
+
+.table-section::before {
+    content: '↕ Role para ver mais';
+    position: absolute;
+    bottom: -1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    color: #64748b;
+    opacity: 0.7;
+}
+
+/* -----------------------------------------------------------------------------
+   Buttons
+   ----------------------------------------------------------------------------- */
+.btn-primary {
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.upload-btn {
+    margin-left: var(--spacing-lg);
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+/* =============================================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   Tablet (768px and below)
+   ----------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    :root {
+        --container-padding: 1rem;
+        --graph-height: 400px;
+        --title-size: 2rem;
+        --card-min-width: 160px;
+    }
+
+    /* Summary cards: 2x2 grid */
+    .summary-cards-container {
+        gap: 0.75rem;
+    }
+
+    .summary-card {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 140px;
+        padding: 1rem;
+    }
+
+    /* Control rows wrap more aggressively */
+    .control-row {
+        gap: 0.5rem;
+    }
+
+    /* Dropdowns shrink */
+    .dropdown-sm, .dropdown-md, .dropdown-lg {
+        min-width: 70px;
+        max-width: 120px;
+    }
+
+    /* Help tooltips - narrower and position better */
+    .help-tooltip {
+        min-width: 200px !important;
+        max-width: calc(100vw - 2rem) !important;
+        left: auto !important;
+        right: 0 !important;
+        transform: none !important;
+    }
+
+    /* Upload button */
+    .upload-btn {
+        margin-left: 1rem;
+    }
+
+    /* Tabs - smaller padding */
+    .tab-content {
+        padding: 1rem;
+        padding-top: 0;
+    }
+
+    /* Table header row stacks on mobile */
+    .table-header-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Phone (480px and below)
+   ----------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+    :root {
+        --container-padding: 0.5rem;
+        --graph-height: 320px;
+        --title-size: 1.4rem;
+        --card-min-width: 100%;
+    }
+
+    /* Settings panel - full width on mobile */
+    .settings-panel {
+        width: 100% !important;
+    }
+
+    /* Header actions - smaller on mobile */
+    .header-actions {
+        top: 0.5rem !important;
+        right: 0.5rem !important;
+    }
+
+    .settings-btn {
+        font-size: 1.25rem !important;
+    }
+
+    /* Summary cards: single column, prevent overflow */
+    .summary-cards-container {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0 0.5rem !important;
+        overflow-x: hidden;
+    }
+
+    .summary-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+
+    .summary-card h2 {
+        font-size: 1.5rem !important;
+        word-break: break-word;
+    }
+
+    /* Export controls - better layout on mobile */
+    .export-controls {
+        flex-wrap: nowrap !important;
+    }
+
+    .export-controls .dropdown-sm {
+        min-width: 90px !important;
+        width: 90px !important;
+    }
+
+    /* PDF upload button in settings - prevent overflow */
+    .upload-btn-settings {
+        font-size: 0.875rem !important;
+        padding: 0.6rem 0.5rem !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Settings content - less padding on mobile */
+    .settings-content {
+        padding: 1rem !important;
+    }
+
+    /* Forecast controls - stack on mobile */
+    .forecast-controls {
+        margin-left: 0.5rem !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    .forecast-controls > div {
+        width: 100% !important;
+        min-width: 100% !important;
+    }
+
+    /* Table header - stack title and controls */
+    .table-header-row {
+        gap: 0.75rem;
+    }
+
+    .table-title-group {
+        width: 100%;
+    }
+
+    /* Settings panel tooltip fixes */
+    .settings-panel .help-icon-container {
+        position: static;
+    }
+
+    .settings-panel .help-tooltip {
+        position: fixed !important;
+        left: 0.5rem !important;
+        right: 0.5rem !important;
+        bottom: auto !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: auto !important;
+        max-width: none !important;
+        z-index: 1100 !important;
+    }
+
+    /* Control rows: clean grid layout */
+    .control-row {
+        display: grid !important;
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+        padding: 0.5rem;
+    }
+
+    /* Each control group is a row */
+    .control-row > div {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    /* Dropdowns: fill available space */
+    .dropdown-sm, .dropdown-md, .dropdown-lg {
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    /* Help icons align to end */
+    .help-icon-container {
+        justify-self: end;
+    }
+
+    /* Labels */
+    .control-row label {
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    /* Upload button: full width */
+    .upload-btn {
+        margin: 0.5rem 0 0 0;
+        width: 100%;
+        text-align: center;
+    }
+
+    /* GitHub link: hide on mobile */
+    .github-link {
+        display: none !important;
+    }
+
+    /* Tab content: minimal padding */
+    .tab-content {
+        padding: 0.25rem;
+        padding-top: 0;
+        min-height: auto;
+    }
+
+    /* Graph container - no extra padding */
+    .graph-container {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Table header row */
+    .table-header-row {
+        gap: 0.5rem;
+    }
+
+    /* Export controls: full width */
+    .export-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Checklists full width */
+    .control-row .dash-checkbox {
+        grid-column: 1 / -1;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Landscape orientation on mobile
+   ----------------------------------------------------------------------------- */
+@media (max-width: 768px) and (orientation: landscape) {
+    :root {
+        --graph-height: 60vh;
+    }
+
+    /* Cards in row for landscape */
+    .summary-cards-container {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .summary-card {
+        flex: 0 0 auto;
+        min-width: 150px;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Large screens (1200px and above)
+   ----------------------------------------------------------------------------- */
+@media (min-width: 1200px) {
+    :root {
+        --container-padding: 3rem;
+        --graph-height: 550px;
+    }
+
+    /* Larger card min-width */
+    .summary-card {
+        min-width: 220px;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Print styles (for PDF export, screenshots)
+   ----------------------------------------------------------------------------- */
+@media print {
+    .upload-btn,
+    .export-controls,
+    .github-link {
+        display: none !important;
+    }
+
+    .summary-cards-container {
+        flex-wrap: nowrap;
+    }
+
+    .graph-container {
+        height: 400px;
+        page-break-inside: avoid;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Accessibility - Reduced motion
+   ----------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Loading indicators - better centering
+   ----------------------------------------------------------------------------- */
+._dash-loading-callback {
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    min-height: 50px;
+}
+
+/* Loading overlay - subtle background */
+.loading-wrapper {
+    position: relative;
+}
+
+.loading-wrapper > div:first-child {
+    background: rgba(15, 23, 42, 0.7);
+    border-radius: 0.75rem;
 }
