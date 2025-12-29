@@ -137,7 +137,7 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                             ),
                         ]
                     ),
-                    # Date range controls
+                    # Date range controls (read-only display)
                     html.Div([
                         html.Div([
                             html.Label('De:', style={'color': COLORS['text'], 'marginBottom': '0.25rem', 'display': 'block', 'fontSize': '0.875rem'}),
@@ -146,6 +146,7 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                                 options=month_options,
                                 value=min_date.isoformat() if min_date else None,
                                 clearable=False,
+                                disabled=True,
                                 className='dropdown-settings',
                                 style={'color': '#000'}
                             ),
@@ -157,6 +158,7 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                                 options=month_options,
                                 value=max_date.isoformat() if max_date else None,
                                 clearable=False,
+                                disabled=True,
                                 className='dropdown-settings',
                                 style={'color': '#000'}
                             ),
@@ -338,30 +340,13 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                     ], className='forecast-controls', style={'display': 'flex', 'gap': '0.5rem', 'alignItems': 'flex-end', 'marginLeft': '1.5rem', 'flexWrap': 'wrap'}),
                 ], className='settings-section', style={'marginBottom': '1.5rem'}),
 
-                # GRÁFICO section
-                html.Div([
-                    html.H4('GRÁFICO', className='settings-section-title', style={
-                        'color': COLORS['text_muted'],
-                        'fontSize': '0.75rem',
-                        'fontWeight': '600',
-                        'letterSpacing': '0.05em',
-                        'margin': '0 0 0.75rem 0',
-                    }),
-                    html.Div([
-                        html.Label('Escala Y:', style={'color': COLORS['text'], 'marginRight': '1rem', 'fontSize': '0.875rem'}),
-                        dcc.RadioItems(
-                            id='scale-toggle',
-                            options=[
-                                {'label': ' Linear', 'value': 'linear'},
-                                {'label': ' Log', 'value': 'log'}
-                            ],
-                            value='linear',
-                            inline=True,
-                            style={'color': COLORS['text']},
-                            labelStyle={'marginRight': '1rem', 'fontSize': '0.875rem'}
-                        )
-                    ], style={'display': 'flex', 'alignItems': 'center'}),
-                ], className='settings-section', style={'marginBottom': '1.5rem'}),
+                # Hidden scale toggle (kept for callback compatibility)
+                dcc.RadioItems(
+                    id='scale-toggle',
+                    options=[{'label': 'linear', 'value': 'linear'}],
+                    value='linear',
+                    style={'display': 'none'}
+                ),
 
                 # OK button
                 html.Button('OK', id='settings-ok-btn', style={
@@ -508,7 +493,12 @@ def create_position_tab(initial_fig) -> html.Div:
             type='circle',
             color=COLORS['primary'],
             children=[
-                dcc.Graph(id='position-graph', figure=initial_fig, className='graph-container')
+                dcc.Graph(
+                    id='position-graph',
+                    figure=initial_fig,
+                    className='graph-container',
+                    config={'scrollZoom': False, 'displayModeBar': False}
+                )
             ]
         ),
         # Data table section
@@ -609,7 +599,14 @@ def create_contributions_tab(contributions_fig) -> html.Div:
             id='loading-contributions-graph',
             type='circle',
             color=COLORS['primary'],
-            children=[dcc.Graph(id='contributions-graph', figure=contributions_fig, className='graph-container')]
+            children=[
+                dcc.Graph(
+                    id='contributions-graph',
+                    figure=contributions_fig,
+                    className='graph-container',
+                    config={'scrollZoom': False, 'displayModeBar': False}
+                )
+            ]
         ),
         # Data table section
         html.Div([
@@ -752,6 +749,6 @@ def create_layout(df_position: pd.DataFrame = None,
         ),
         # Settings panel state store
         dcc.Store(id='settings-panel-open', data=not has_data),  # Open by default when no data
-    ], className='page-container', style={
+    ], id='page-container', className='page-container', style={
         'backgroundColor': COLORS['background'],
     })

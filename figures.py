@@ -131,6 +131,7 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
         ),
         autosize=True,
         margin=dict(l=0, r=0, t=10, b=20),
+        dragmode=False,
         legend=dict(
             orientation='v',
             yanchor='top',
@@ -277,6 +278,7 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
         ),
         autosize=True,
         margin=dict(l=0, r=0, t=10, b=20),
+        dragmode=False,
         legend=dict(
             orientation='v',
             yanchor='top',
@@ -316,6 +318,7 @@ def create_empty_figure(message: str = "Sem dados") -> go.Figure:
         paper_bgcolor=COLORS['background'],
         xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
         yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-        margin=dict(l=40, r=40, t=40, b=40)
+        margin=dict(l=40, r=40, t=40, b=40),
+        dragmode=False
     )
     return fig

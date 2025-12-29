@@ -1166,6 +1166,7 @@ def register_callbacks(app):
         Output('settings-overlay', 'style'),
         Output('settings-panel-open', 'data'),
         Output('settings-content', 'style'),
+        Output('page-container', 'style'),
         Input('settings-btn', 'n_clicks'),
         Input('settings-close-btn', 'n_clicks'),
         Input('settings-ok-btn', 'n_clicks'),
@@ -1228,13 +1229,21 @@ def register_callbacks(app):
             'flex': '1',
         }
 
-        return panel_base_style, overlay_style, new_is_open, content_style
+        # Page container style - lock scroll when panel is open
+        page_style = {
+            'backgroundColor': COLORS['background'],
+            'overflow': 'hidden' if new_is_open else 'auto',
+            'height': '100vh' if new_is_open else 'auto',
+        }
+
+        return panel_base_style, overlay_style, new_is_open, content_style, page_style
 
     @callback(
         Output('settings-panel', 'style', allow_duplicate=True),
         Output('settings-overlay', 'style', allow_duplicate=True),
         Output('settings-panel-open', 'data', allow_duplicate=True),
         Output('settings-content', 'style', allow_duplicate=True),
+        Output('page-container', 'style', allow_duplicate=True),
         Input('settings-panel-open', 'data'),
         prevent_initial_call='initial_duplicate'
     )
@@ -1279,4 +1288,11 @@ def register_callbacks(app):
             'flex': '1',
         }
 
-        return panel_base_style, overlay_style, is_open, content_style
+        # Page container style - lock scroll when panel is open
+        page_style = {
+            'backgroundColor': COLORS['background'],
+            'overflow': 'hidden' if is_open else 'auto',
+            'height': '100vh' if is_open else 'auto',
+        }
+
+        return panel_base_style, overlay_style, is_open, content_style, page_style
