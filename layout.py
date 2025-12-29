@@ -471,6 +471,54 @@ def create_position_tab(benchmark_options: list, initial_fig) -> html.Div:
             ),
             dcc.Download(id='position-download'),
         ], style={'marginTop': '2rem'}),
+        # Forecast data table section (only visible when forecast is ON)
+        html.Div(id='forecast-table-section', children=[
+            html.Div([
+                html.H3('Dados Projeção', style={'color': COLORS['text'], 'margin': '0'}),
+                html.Div([
+                    dcc.Dropdown(
+                        id='forecast-export-format',
+                        options=[
+                            {'label': 'CSV', 'value': 'csv'},
+                            {'label': 'Excel', 'value': 'xlsx'}
+                        ],
+                        value='csv',
+                        clearable=False,
+                        style={'width': '100px', 'color': '#000'}
+                    ),
+                    html.Button('Exportar', id='forecast-export-btn', style={
+                        'backgroundColor': COLORS['primary'],
+                        'color': COLORS['text'],
+                        'border': 'none',
+                        'borderRadius': '0.5rem',
+                        'padding': '0.5rem 1rem',
+                        'cursor': 'pointer',
+                        'marginLeft': '0.5rem'
+                    }),
+                ], style={'display': 'flex', 'alignItems': 'center'}),
+            ], style={
+                'display': 'flex',
+                'justifyContent': 'space-between',
+                'alignItems': 'center',
+                'marginBottom': '1rem'
+            }),
+            dcc.Loading(
+                id='loading-forecast-table',
+                type='circle',
+                color=COLORS['primary'],
+                children=[
+                    dash_table.DataTable(
+                        id='forecast-data-table',
+                        columns=[],
+                        data=[],
+                        page_action='none',
+                        sort_action='native',
+                        **table_styles
+                    ),
+                ]
+            ),
+            dcc.Download(id='forecast-download'),
+        ], style={'display': 'none', 'marginTop': '2rem'}),  # Hidden by default
     ], style={
         'padding': '2rem',
         'backgroundColor': COLORS['background'],

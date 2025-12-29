@@ -452,9 +452,12 @@ def register_callbacks(app):
                     include_company_match=True  # Nucleos always gets company match
                 )
 
-                # Store forecast data for table display
+                # Store forecast data for table display (will add benchmark later)
                 if not forecast_nucleos.empty:
-                    forecast_store_data = forecast_nucleos.to_dict('records')
+                    forecast_store_data = {
+                        'nucleos': forecast_nucleos.to_dict('records'),
+                        'benchmark': None
+                    }
 
             # Generate benchmark forecast if benchmark is selected
             # The benchmark CAGR should be the REAL index growth rate,
@@ -520,6 +523,9 @@ def register_callbacks(app):
                                     growth_rate,
                                     include_company_match=not treat_company_as_mine
                                 )
+                                # Add benchmark forecast to store data
+                                if forecast_store_data is not None and not forecast_benchmark.empty:
+                                    forecast_store_data['benchmark'] = forecast_benchmark.to_dict('records')
 
         fig = create_position_figure(
             df_pos_filtered,
@@ -1034,3 +1040,125 @@ def register_callbacks(app):
             return dcc.send_data_frame(df.to_csv, 'nucleos_contribuicoes.csv', index=False)
         else:
             return dcc.send_data_frame(df.to_excel, 'nucleos_contribuicoes.xlsx', index=False, engine='openpyxl')
+
+    @callback(
+        Output('forecast-table-section', 'style'),
+        Input('forecast-toggle', 'value'),
+    )
+    def toggle_forecast_table_visibility(forecast_toggle):
+        """Show/hide the forecast table section based on forecast toggle."""
+        is_forecast_on = 'enabled' in (forecast_toggle or [])
+        if is_forecast_on:
+            # Show section immediately so loading spinner is visible
+            return {'display': 'block', 'marginTop': '2rem'}
+        return {'display': 'none'}
+
+    @callback(
+        Output('forecast-data-table', 'data'),
+        Output('forecast-data-table', 'columns'),
+        Input('forecast-data', 'data'),
+        Input('company-as-mine-toggle', 'value'),
+        Input('forecast-toggle', 'value'),
+        State('contributions-data', 'data'),
+    )
+    def update_forecast_table(forecast_data, company_as_mine, forecast_toggle, contributions_data):
+        """Populate forecast data table with projected positions and cumulative contributions."""
+        is_forecast_on = 'enabled' in (forecast_toggle or [])
+
+        if not forecast_data:
+            if is_forecast_on:
+                # Show placeholder while data is being computed
+                return [{'data': 'Calculando projeção...', 'posicao': '', 'benchmark': '', 'total_contrib': ''}], [
+                    {'name': 'Data', 'id': 'data'},
+                    {'name': 'Posição (Projeção)', 'id': 'posicao'},
+                    {'name': 'Simulado (Projeção)', 'id': 'benchmark'},
+                    {'name': 'Contrib. Total Acum.', 'id': 'total_contrib'},
+                ]
+            return [], []
+
+        # Handle new dict structure with 'nucleos' and 'benchmark' keys
+        nucleos_data = forecast_data.get('nucleos', []) if isinstance(forecast_data, dict) else forecast_data
+        benchmark_data = forecast_data.get('benchmark', []) if isinstance(forecast_data, dict) else []
+
+        if not nucleos_data:
+            return [], []
+
+        # Get last cumulative contribution from historical data
+        last_cumulative_total = 0
+        last_cumulative_participant = 0
+        if contributions_data:
+            df_contrib = pd.DataFrame(contributions_data)
+            last_cumulative_total = df_contrib['contribuicao_total'].sum()
+            if 'contrib_participante' in df_contrib.columns:
+                last_cumulative_participant = df_contrib['contrib_participante'].sum()
+
+        treat_company_as_mine = 'as_mine' in (company_as_mine or [])
+
+        # Build benchmark lookup by date
+        benchmark_lookup = {}
+        if benchmark_data:
+            for b_row in benchmark_data:
+                b_date = pd.to_datetime(b_row['data']).strftime('%b %Y')
+                benchmark_lookup[b_date] = b_row['posicao']
+
+        # Build table data with cumulative contributions
+        table_data = []
+        cumulative_total = last_cumulative_total
+        cumulative_participant = last_cumulative_participant
+
+        for fc_row in nucleos_data:
+            fc_date = pd.to_datetime(fc_row['data'])
+            fc_date_str = fc_date.strftime('%b %Y')
+            monthly_total = fc_row.get('contribuicao_total_proj', 0)
+            monthly_participant = fc_row.get('contrib_participante_proj', 0)
+
+            cumulative_total += monthly_total
+            cumulative_participant += monthly_participant
+
+            row_data = {
+                'data': fc_date_str,
+                'posicao': f"R$ {fc_row['posicao']:,.2f}",
+                'total_contrib': f"R$ {cumulative_total:,.2f}",
+            }
+
+            # Add benchmark projection if available
+            if fc_date_str in benchmark_lookup:
+                row_data['benchmark'] = f"R$ {benchmark_lookup[fc_date_str]:,.2f}"
+            else:
+                row_data['benchmark'] = '-'
+
+            if treat_company_as_mine:
+                row_data['participant_contrib'] = f"R$ {cumulative_participant:,.2f}"
+
+            table_data.append(row_data)
+
+        # Build columns
+        columns = [
+            {'name': 'Data', 'id': 'data'},
+            {'name': 'Posição (Projeção)', 'id': 'posicao'},
+            {'name': 'Simulado (Projeção)', 'id': 'benchmark'},
+            {'name': 'Contrib. Total Acum.', 'id': 'total_contrib'},
+        ]
+        if treat_company_as_mine:
+            columns.append({'name': 'Contrib. Participante Acum.', 'id': 'participant_contrib'})
+
+        return table_data, columns
+
+    @callback(
+        Output('forecast-download', 'data'),
+        Input('forecast-export-btn', 'n_clicks'),
+        State('forecast-data-table', 'data'),
+        State('forecast-export-format', 'value'),
+        prevent_initial_call=True
+    )
+    def export_forecast_data(n_clicks, table_data, export_format):
+        """Export forecast table data to CSV or Excel."""
+        if not table_data:
+            raise dash.exceptions.PreventUpdate
+
+        df = pd.DataFrame(table_data)
+
+        if export_format == 'csv':
+            return dcc.send_data_frame(df.to_csv, 'nucleos_projecao.csv', index=False)
+        else:
+            return dcc.send_data_frame(df.to_excel, 'nucleos_projecao.xlsx', index=False, engine='openpyxl')
