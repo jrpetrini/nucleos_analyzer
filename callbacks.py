@@ -75,6 +75,9 @@ def register_callbacks(app):
         Output('forecast-years', 'disabled'),
         Output('forecast-years', 'style'),
         Output('forecast-years-label', 'style'),
+        Output('growth-rate', 'disabled'),
+        Output('growth-rate', 'style'),
+        Output('growth-rate-label', 'style'),
         Input('forecast-toggle', 'value')
     )
     def toggle_forecast_controls(forecast_toggle):
@@ -82,13 +85,16 @@ def register_callbacks(app):
         is_enabled = 'enabled' in (forecast_toggle or [])
 
         if is_enabled:
-            dropdown_style = {'width': '100px', 'color': '#000'}
+            years_style = {'width': '100px', 'color': '#000'}
+            growth_style = {'width': '150px', 'color': '#000'}
             label_style = {'color': COLORS['text'], 'marginLeft': '1rem'}
         else:
-            dropdown_style = {'width': '100px', 'color': '#000', 'opacity': '0.5'}
+            years_style = {'width': '100px', 'color': '#000', 'opacity': '0.5'}
+            growth_style = {'width': '150px', 'color': '#000', 'opacity': '0.5'}
             label_style = {'color': COLORS['text_muted'], 'marginLeft': '1rem'}
 
-        return not is_enabled, dropdown_style, label_style
+        return (not is_enabled, years_style, label_style,
+                not is_enabled, growth_style, label_style)
 
     @callback(
         Output('inflation-reference-month', 'options'),
@@ -256,6 +262,7 @@ def register_callbacks(app):
         Input('contributions-data', 'data'),
         Input('forecast-toggle', 'value'),
         Input('forecast-years', 'value'),
+        Input('growth-rate', 'value'),
         State('inflation-toggle', 'value'),
         State('inflation-index-select', 'value'),
         State('inflation-reference-month', 'value'),
@@ -266,7 +273,7 @@ def register_callbacks(app):
     )
     def update_position_graph(scale, start_date, end_date, benchmark_name, overhead,
                               company_as_mine, position_data, contributions_data,
-                              forecast_toggle, forecast_years,
+                              forecast_toggle, forecast_years, growth_rate,
                               inflation_toggle, inflation_index, inflation_ref_month,
                               contributions_original, date_range, cache, pdf_metadata):
         """Update the position graph and benchmark calculations."""
@@ -441,7 +448,8 @@ def register_callbacks(app):
                     df_contrib_filtered,
                     nucleos_cagr,
                     forecast_years,
-                    company_as_mine=False  # Always use full investment for growth
+                    growth_rate,
+                    include_company_match=True  # Nucleos always gets company match
                 )
 
                 # Store forecast data for table display
@@ -491,21 +499,26 @@ def register_callbacks(app):
 
                     if not bench_sim_full.empty:
                         bench_final_full = bench_sim_full['posicao'].iloc[-1]
-                        bench_dates = df_contrib_full['data'].tolist() + [last_date]
-                        bench_amounts = [-amt for amt in df_contrib_full['contribuicao_total'].tolist()] + [bench_final_full]
+                        # Use deflated contributions when inflation is ON for consistent CAGR
+                        # df_contrib_filtered is already deflated by apply_inflation_adjustment callback
+                        contrib_for_bench_cagr = df_contrib_filtered if is_inflation_on else df_contrib_full
+                        bench_dates = contrib_for_bench_cagr['data'].tolist() + [last_date]
+                        bench_amounts = [-amt for amt in contrib_for_bench_cagr['contribuicao_total'].tolist()] + [bench_final_full]
                         real_bench_cagr = xirr_bizdays(bench_dates, bench_amounts)
 
                         if real_bench_cagr is not None:
                             # Generate forecast starting from the displayed benchmark_sim
-                            # (which may use participant-only contributions), but using
-                            # the real benchmark CAGR for growth projection
+                            # When "company as mine" is ON, benchmark gets NO company match
+                            # (counterfactual: you invested only YOUR money in the benchmark)
                             if benchmark_sim is not None and not benchmark_sim.empty:
+                                treat_company_as_mine = 'as_mine' in (company_as_mine or [])
                                 forecast_benchmark = generate_forecast(
                                     benchmark_sim,
                                     df_contrib_filtered,
                                     real_bench_cagr,
                                     forecast_years,
-                                    company_as_mine=False
+                                    growth_rate,
+                                    include_company_match=not treat_company_as_mine
                                 )
 
         fig = create_position_figure(

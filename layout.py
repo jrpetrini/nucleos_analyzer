@@ -7,8 +7,8 @@ import pandas as pd
 from dash import dcc, html, dash_table
 
 from components import (
-    COLORS, OVERHEAD_OPTIONS, FORECAST_OPTIONS, HELP_TEXTS,
-    create_help_icon, create_data_table_styles, create_tab_style
+    COLORS, OVERHEAD_OPTIONS, FORECAST_OPTIONS, GROWTH_RATE_OPTIONS, DEFAULT_GROWTH_RATE,
+    HELP_TEXTS, create_help_icon, create_data_table_styles, create_tab_style
 )
 from figures import create_position_figure, create_contributions_figure, create_empty_figure
 from calculator import calculate_summary_stats
@@ -393,6 +393,17 @@ def create_position_tab(benchmark_options: list, initial_fig) -> html.Div:
                 style={'width': '100px', 'color': '#000', 'opacity': '0.5'},
                 disabled=True  # Enabled only when forecast toggle ON
             ),
+            html.Label('Cresc. salarial:', id='growth-rate-label',
+                       style={'color': COLORS['text_muted'], 'marginLeft': '1rem'}),
+            dcc.Dropdown(
+                id='growth-rate',
+                options=GROWTH_RATE_OPTIONS,
+                value=DEFAULT_GROWTH_RATE,
+                clearable=False,
+                style={'width': '150px', 'color': '#000', 'opacity': '0.5'},
+                disabled=True  # Enabled only when forecast toggle ON
+            ),
+            create_help_icon(HELP_TEXTS['salary_growth'], 'help-salary-growth'),
         ], style={
             'display': 'flex',
             'alignItems': 'center',

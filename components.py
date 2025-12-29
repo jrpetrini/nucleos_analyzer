@@ -55,6 +55,7 @@ HELP_TEXTS = {
     'contributions_table': 'Tabela com contribuições mensais, total investido acumulado e posição. Quando o toggle "empresa como sem custo" está ativo, mostra a divisão participante/patrocinador.',
     'inflation_adjustment': 'Ajusta valores para mostrar retornos reais. IPCA: inflação oficial. INPC: inflação para salários. Valores são ajustados para o mês de referência.',
     'forecast': 'Projeta a posição no futuro usando o CAGR histórico e o padrão de contribuições. Quando o ajuste por inflação está ativo, a projeção também é deflacionada pela inflação projetada. Linha tracejada indica projeção (não garantida).',
+    'salary_growth': 'Taxa de crescimento REAL do salário (acima da inflação), baseada no PCR (Plano de Carreira e Remuneração). Rápido: 3 passos a cada 2 anos (promoções frequentes). Médio: média geométrica. Lento: 0.5 passo por ano (progressão conservadora). A contribuição futura segue S(t) = S₀ × e^(taxa × t).',
 }
 
 # Forecast year options
@@ -66,6 +67,23 @@ FORECAST_OPTIONS = [
     {'label': '15 anos', 'value': 15},
     {'label': '20 anos', 'value': 20},
 ]
+
+# Contribution growth rate options (salary progression, REAL rates above inflation)
+# Fast: 4.43% real (PCR 3 steps every 2 years = 1.5 steps/year)
+# Slow: 1.48% real (0.5 steps/year)
+# Mid: geometric mean = sqrt(fast × slow) ≈ 2.56% real
+import math
+GROWTH_RATE_FAST = 0.0443
+GROWTH_RATE_SLOW = GROWTH_RATE_FAST / 3  # 0.01477
+GROWTH_RATE_MID = math.sqrt(GROWTH_RATE_FAST * GROWTH_RATE_SLOW)  # 0.02558
+
+GROWTH_RATE_OPTIONS = [
+    {'label': 'Lento (+1.5% real)', 'value': GROWTH_RATE_SLOW},
+    {'label': 'Médio (+2.6% real)', 'value': GROWTH_RATE_MID},
+    {'label': 'Rápido (+4.4% real)', 'value': GROWTH_RATE_FAST},
+]
+
+DEFAULT_GROWTH_RATE = GROWTH_RATE_MID
 
 
 def create_help_icon(help_text: str, icon_id: str = None) -> html.Div:

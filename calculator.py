@@ -276,12 +276,13 @@ def calculate_summary_stats(df_position: pd.DataFrame,
 # =============================================================================
 # FORECAST ASSUMPTIONS (documented for transparency)
 # =============================================================================
-# These constants are derived from typical career progression patterns:
+# Forecasting assumptions (configurable via UI):
 #
-# CONTRIBUTION_GROWTH_RATE = 0.0443 (per year, exponential)
-#   - Based on PCR ("Plano de Carreira e Remuneração") table
-#   - Assumes 3 salary steps every 2 years
-#   - Formula: S(t) = S0 × exp(0.0443 × t), where t is in years
+# Salary growth rate (user-selectable, REAL rates above inflation):
+#   - Fast: 4.43% real (3 salary steps every 2 years)
+#   - Medium: 2.56% real (geometric average)
+#   - Slow: 1.48% real (0.5 steps per year)
+#   - Formula: S(t) = S0 × exp(growth_rate × t), where t is in years
 #
 # COMPANY_MATCH_RATIO = 0.85
 #   - Company matches 85% of participant contribution
@@ -296,7 +297,6 @@ def calculate_summary_stats(df_position: pd.DataFrame,
 # These are PROJECTIONS, not guarantees. Actual results may vary significantly.
 # =============================================================================
 
-CONTRIBUTION_GROWTH_RATE = 0.0443  # Annual exponential growth rate
 COMPANY_MATCH_RATIO = 0.85  # Company matches 85% of participant contribution
 
 
@@ -304,14 +304,14 @@ def generate_forecast(df_position: pd.DataFrame,
                       df_contributions: pd.DataFrame,
                       cagr: float,
                       years: int,
-                      company_as_mine: bool = False) -> pd.DataFrame:
+                      growth_rate: float,
+                      include_company_match: bool = True) -> pd.DataFrame:
     """
     Generate forecast data for future position projection.
 
     ASSUMPTIONS (inform user):
-    - Contributions grow at 4.43% per year (PCR: 3 steps/2 years)
-    - Company matches 85% of participant contribution
-    - Total invested each month = participant × 1.85
+    - Contributions grow at the selected real rate (above inflation)
+    - Company matches 85% of participant contribution (if include_company_match=True)
     - Historical CAGR continues unchanged
     - Contributions happen on 1st of each month
 
@@ -321,15 +321,16 @@ def generate_forecast(df_position: pd.DataFrame,
                          and optionally 'contrib_participante' columns
         cagr: Historical CAGR (as decimal, e.g., 0.10 for 10%)
         years: Number of years to forecast
-        company_as_mine: If True, only count participant portion for CAGR accounting
-                        (but total invested is still participant × 1.85)
+        growth_rate: Annual real salary growth rate (e.g., 0.0256 for 2.56%)
+        include_company_match: If True, total = participant × 1.85; if False, total = participant only
+                              (use False for benchmark when "company as mine" is ON)
 
     Returns:
         DataFrame with forecasted data:
         - 'data': forecast date
-        - 'posicao': projected position (same regardless of toggle)
+        - 'posicao': projected position
         - 'is_forecast': True (marker for dashed line)
-        - 'contribuicao_total_proj': total invested (participant × 1.85)
+        - 'contribuicao_total_proj': total invested
         - 'contrib_participante_proj': participant portion only
     """
     if df_position.empty or df_contributions.empty or cagr is None:
@@ -370,11 +371,14 @@ def generate_forecast(df_position: pd.DataFrame,
         t_years = month / 12  # Time in years from start of forecast
 
         # Calculate participant contribution with growth
-        # S(t) = S0 × exp(0.0443 × t)
-        participant_contrib = base_participant * math.exp(CONTRIBUTION_GROWTH_RATE * t_years)
+        # S(t) = S0 × exp(growth_rate × t)
+        participant_contrib = base_participant * math.exp(growth_rate * t_years)
 
-        # Total invested = participant × 1.85 (always, regardless of toggle)
-        total_contrib = participant_contrib * (1 + COMPANY_MATCH_RATIO)
+        # Total invested depends on whether company match is included
+        if include_company_match:
+            total_contrib = participant_contrib * (1 + COMPANY_MATCH_RATIO)
+        else:
+            total_contrib = participant_contrib
 
         # Add contribution at start of month, then apply growth
         current_position += total_contrib
@@ -391,12 +395,11 @@ def generate_forecast(df_position: pd.DataFrame,
     return pd.DataFrame(forecast_data)
 
 
-def get_forecast_assumptions_text() -> str:
+def get_forecast_assumptions_text(growth_rate: float) -> str:
     """Return text explaining forecast assumptions for UI display."""
     return (
         "Premissas da projeção:\n"
-        f"• Contribuições crescem {CONTRIBUTION_GROWTH_RATE*100:.2f}% a.a. "
-        "(PCR: 3 passos a cada 2 anos)\n"
+        f"• Contribuições crescem {growth_rate*100:.1f}% a.a. real (acima da inflação)\n"
         f"• Empresa aporta {COMPANY_MATCH_RATIO*100:.0f}% do participante\n"
         "• CAGR histórico mantém-se constante\n"
         "• Projeções não são garantias de retorno"
