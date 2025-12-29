@@ -7,8 +7,8 @@ import pandas as pd
 from dash import dcc, html, dash_table
 
 from components import (
-    COLORS, OVERHEAD_OPTIONS, HELP_TEXTS,
-    create_help_icon, create_data_table_styles, create_tab_style
+    COLORS, OVERHEAD_OPTIONS, FORECAST_OPTIONS, GROWTH_RATE_OPTIONS, DEFAULT_GROWTH_RATE,
+    HELP_TEXTS, create_help_icon, create_data_table_styles, create_tab_style
 )
 from figures import create_position_figure, create_contributions_figure, create_empty_figure
 from calculator import calculate_summary_stats
@@ -373,6 +373,44 @@ def create_position_tab(benchmark_options: list, initial_fig) -> html.Div:
             'flexWrap': 'wrap',
             'gap': '0.5rem'
         }),
+        # Forecast controls
+        html.Div([
+            dcc.Checklist(
+                id='forecast-toggle',
+                options=[{'label': ' Projetar no futuro', 'value': 'enabled'}],
+                value=[],  # Default OFF
+                style={'color': COLORS['text']},
+                labelStyle={'display': 'flex', 'alignItems': 'center'}
+            ),
+            create_help_icon(HELP_TEXTS['forecast'], 'help-forecast'),
+            html.Label('Anos:', id='forecast-years-label',
+                       style={'color': COLORS['text_muted'], 'marginLeft': '1rem'}),
+            dcc.Dropdown(
+                id='forecast-years',
+                options=FORECAST_OPTIONS,
+                value=1,  # Default 1 year
+                clearable=False,
+                style={'width': '100px', 'color': '#000', 'opacity': '0.5'},
+                disabled=True  # Enabled only when forecast toggle ON
+            ),
+            html.Label('Cresc. salarial:', id='growth-rate-label',
+                       style={'color': COLORS['text_muted'], 'marginLeft': '1rem'}),
+            dcc.Dropdown(
+                id='growth-rate',
+                options=GROWTH_RATE_OPTIONS,
+                value=DEFAULT_GROWTH_RATE,
+                clearable=False,
+                style={'width': '150px', 'color': '#000', 'opacity': '0.5'},
+                disabled=True  # Enabled only when forecast toggle ON
+            ),
+            create_help_icon(HELP_TEXTS['salary_growth'], 'help-salary-growth'),
+        ], style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'marginBottom': '1rem',
+            'flexWrap': 'wrap',
+            'gap': '0.5rem'
+        }),
         # Graph
         dcc.Loading(
             id='loading-graph',
@@ -433,6 +471,54 @@ def create_position_tab(benchmark_options: list, initial_fig) -> html.Div:
             ),
             dcc.Download(id='position-download'),
         ], style={'marginTop': '2rem'}),
+        # Forecast data table section (only visible when forecast is ON)
+        html.Div(id='forecast-table-section', children=[
+            html.Div([
+                html.H3('Dados Projeção', style={'color': COLORS['text'], 'margin': '0'}),
+                html.Div([
+                    dcc.Dropdown(
+                        id='forecast-export-format',
+                        options=[
+                            {'label': 'CSV', 'value': 'csv'},
+                            {'label': 'Excel', 'value': 'xlsx'}
+                        ],
+                        value='csv',
+                        clearable=False,
+                        style={'width': '100px', 'color': '#000'}
+                    ),
+                    html.Button('Exportar', id='forecast-export-btn', style={
+                        'backgroundColor': COLORS['primary'],
+                        'color': COLORS['text'],
+                        'border': 'none',
+                        'borderRadius': '0.5rem',
+                        'padding': '0.5rem 1rem',
+                        'cursor': 'pointer',
+                        'marginLeft': '0.5rem'
+                    }),
+                ], style={'display': 'flex', 'alignItems': 'center'}),
+            ], style={
+                'display': 'flex',
+                'justifyContent': 'space-between',
+                'alignItems': 'center',
+                'marginBottom': '1rem'
+            }),
+            dcc.Loading(
+                id='loading-forecast-table',
+                type='circle',
+                color=COLORS['primary'],
+                children=[
+                    dash_table.DataTable(
+                        id='forecast-data-table',
+                        columns=[],
+                        data=[],
+                        page_action='none',
+                        sort_action='native',
+                        **table_styles
+                    ),
+                ]
+            ),
+            dcc.Download(id='forecast-download'),
+        ], style={'display': 'none', 'marginTop': '2rem'}),  # Hidden by default
     ], style={
         'padding': '2rem',
         'backgroundColor': COLORS['background'],
@@ -533,6 +619,8 @@ def create_data_stores(position_data: list, contributions_data: list,
         dcc.Store(id='month-options', data=month_options),
         # PDF metadata (partial history detection)
         dcc.Store(id='pdf-metadata', data=pdf_metadata or {}),
+        # Forecast data (generated when toggle is ON)
+        dcc.Store(id='forecast-data', data=None),
     ]
 
 

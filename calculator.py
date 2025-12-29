@@ -271,3 +271,136 @@ def calculate_summary_stats(df_position: pd.DataFrame,
         'total_return': total_return,
         'cagr_pct': cagr_pct
     }
+
+
+# =============================================================================
+# FORECAST ASSUMPTIONS (documented for transparency)
+# =============================================================================
+# Forecasting assumptions (configurable via UI):
+#
+# Salary growth rate (user-selectable, REAL rates above inflation):
+#   - Fast: 4.43% real (3 salary steps every 2 years)
+#   - Medium: 2.56% real (geometric average)
+#   - Slow: 1.48% real (0.5 steps per year)
+#   - Formula: S(t) = S0 × exp(growth_rate × t), where t is in years
+#
+# COMPANY_MATCH_RATIO = 0.85
+#   - Company matches 85% of participant contribution
+#   - Total monthly investment = participant × 1.85
+#   - This is the actual amount going into the fund each month
+#
+# The "company as mine" toggle affects ACCOUNTING only:
+#   - Toggle OFF: count full 1.85× as "my investment" for CAGR
+#   - Toggle ON: count only participant portion as "my investment" for CAGR
+#   - Either way, the same total amount is invested
+#
+# These are PROJECTIONS, not guarantees. Actual results may vary significantly.
+# =============================================================================
+
+COMPANY_MATCH_RATIO = 0.85  # Company matches 85% of participant contribution
+
+
+def generate_forecast(df_position: pd.DataFrame,
+                      df_contributions: pd.DataFrame,
+                      cagr: float,
+                      years: int,
+                      growth_rate: float,
+                      include_company_match: bool = True) -> pd.DataFrame:
+    """
+    Generate forecast data for future position projection.
+
+    ASSUMPTIONS (inform user):
+    - Contributions grow at the selected real rate (above inflation)
+    - Company matches 85% of participant contribution (if include_company_match=True)
+    - Historical CAGR continues unchanged
+    - Contributions happen on 1st of each month
+
+    Args:
+        df_position: Historical position data with 'data' and 'posicao' columns
+        df_contributions: Historical contributions with 'data', 'contribuicao_total',
+                         and optionally 'contrib_participante' columns
+        cagr: Historical CAGR (as decimal, e.g., 0.10 for 10%)
+        years: Number of years to forecast
+        growth_rate: Annual real salary growth rate (e.g., 0.0256 for 2.56%)
+        include_company_match: If True, total = participant × 1.85; if False, total = participant only
+                              (use False for benchmark when "company as mine" is ON)
+
+    Returns:
+        DataFrame with forecasted data:
+        - 'data': forecast date
+        - 'posicao': projected position
+        - 'is_forecast': True (marker for dashed line)
+        - 'contribuicao_total_proj': total invested
+        - 'contrib_participante_proj': participant portion only
+    """
+    if df_position.empty or df_contributions.empty or cagr is None:
+        return pd.DataFrame()
+
+    # Get last position and date
+    last_date = df_position['data'].max()
+    last_position = df_position.loc[df_position['data'] == last_date, 'posicao'].iloc[0]
+
+    # Calculate base monthly contribution from last 12 months (participant only)
+    recent_contrib = df_contributions[
+        df_contributions['data'] >= last_date - pd.DateOffset(months=12)
+    ]
+
+    if 'contrib_participante' in recent_contrib.columns:
+        base_participant = recent_contrib['contrib_participante'].mean()
+    else:
+        # Estimate participant as total / 1.85
+        base_participant = recent_contrib['contribuicao_total'].mean() / (1 + COMPANY_MATCH_RATIO)
+
+    if pd.isna(base_participant) or base_participant <= 0:
+        # Fallback: use total contributions divided by 1.85
+        base_participant = recent_contrib['contribuicao_total'].mean() / (1 + COMPANY_MATCH_RATIO)
+        if pd.isna(base_participant):
+            base_participant = 0
+
+    # Calculate monthly growth rate from CAGR
+    # CAGR is annual rate, convert to monthly: (1 + cagr)^(1/12) - 1
+    monthly_rate = (1 + cagr) ** (1/12) - 1
+
+    # Generate forecast months
+    forecast_data = []
+    current_position = last_position
+
+    import math
+    for month in range(1, years * 12 + 1):
+        forecast_date = last_date + pd.DateOffset(months=month)
+        t_years = month / 12  # Time in years from start of forecast
+
+        # Calculate participant contribution with growth
+        # S(t) = S0 × exp(growth_rate × t)
+        participant_contrib = base_participant * math.exp(growth_rate * t_years)
+
+        # Total invested depends on whether company match is included
+        if include_company_match:
+            total_contrib = participant_contrib * (1 + COMPANY_MATCH_RATIO)
+        else:
+            total_contrib = participant_contrib
+
+        # Add contribution at start of month, then apply growth
+        current_position += total_contrib
+        current_position *= (1 + monthly_rate)
+
+        forecast_data.append({
+            'data': forecast_date,
+            'posicao': current_position,
+            'is_forecast': True,
+            'contribuicao_total_proj': total_contrib,
+            'contrib_participante_proj': participant_contrib,
+        })
+
+    return pd.DataFrame(forecast_data)
+
+
+def get_forecast_assumptions_text(growth_rate: float) -> str:
+    """Return text explaining forecast assumptions for UI display."""
+    return (
+        "Premissas da projeção:\n"
+        f"• Contribuições crescem {growth_rate*100:.1f}% a.a. real (acima da inflação)\n"
+        f"• Empresa aporta {COMPANY_MATCH_RATIO*100:.0f}% do participante\n"
+        "• CAGR histórico mantém-se constante\n"
+        "• Projeções não são garantias de retorno"
+    )
