@@ -210,7 +210,7 @@ valor_real = valor_nominal × (índice_referência / índice_data)
 Isso permite visualizar o poder de compra real dos seus investimentos ao longo do tempo.
 
 <details>
-<summary><strong>🧪 Suite de Testes (183 testes)</strong></summary>
+<summary><strong>🧪 Suite de Testes (232 testes)</strong></summary>
 
 ### Executar Testes
 
@@ -232,13 +232,14 @@ pytest tests/ --cov=. --cov-report=term-missing
 
 | Arquivo | Testes | Descrição |
 |---------|--------|-----------|
-| `test_calculator.py` | 27 | XIRR, deflação, processamento de dados |
-| `test_business_logic.py` | 30 | Lógica de cálculo de estatísticas e benchmarks |
-| `test_benchmarks.py` | 49 | Simulação de benchmarks (CDI, IPCA, INPC, S&P500, USD) |
-| `test_extractor.py` | 12 | Extração de dados do PDF |
-| `test_dashboard_helpers.py` | 12 | Funções auxiliares da UI |
-| `test_data_sources.py` | 13 | Cross-validação BCB vs IPEA APIs |
-| `test_integration.py` | 34 | Testes end-to-end com PDFs reais |
+| `test_calculator.py` | 18 | XIRR, deflação, processamento de dados |
+| `test_business_logic.py` | 22 | Lógica de cálculo de estatísticas e benchmarks |
+| `test_benchmarks.py` | 39 | Simulação de benchmarks (CDI, IPCA, INPC, S&P500, USD) |
+| `test_extractor.py` | 28 | Extração de dados do PDF |
+| `test_dashboard_helpers.py` | 28 | Funções auxiliares da UI |
+| `test_data_sources.py` | 8 | Cross-validação BCB vs IPEA APIs |
+| `test_equivalence.py` | 12 | Equivalência entre PDFs parciais e completos |
+| `test_integration.py` | 47 | Testes end-to-end com PDFs reais |
 | `conftest.py` | — | Fixtures compartilhadas |
 
 ### Cobertura de Código

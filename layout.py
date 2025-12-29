@@ -7,7 +7,7 @@ import pandas as pd
 from dash import dcc, html, dash_table
 
 from components import (
-    COLORS, BUTTON_STYLE, BUTTON_DANGER_STYLE,
+    COLORS, BUTTON_STYLE, BUTTON_DANGER_STYLE, Dropdown,
     OVERHEAD_OPTIONS, FORECAST_OPTIONS, GROWTH_RATE_OPTIONS, DEFAULT_GROWTH_RATE,
     HELP_TEXTS, create_help_icon, create_data_table_styles, create_tab_style
 )
@@ -123,26 +123,24 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                     html.Div([
                         html.Div([
                             html.Label('De:', style={'color': COLORS['text'], 'marginBottom': '0.25rem', 'display': 'block', 'fontSize': '0.875rem'}),
-                            dcc.Dropdown(
+                            Dropdown(
                                 id='start-month',
                                 options=month_options,
                                 value=min_date.isoformat() if min_date else None,
-                                clearable=False,
                                 disabled=True,
                                 className='dropdown-settings',
-                                style={'color': '#000'}
+                                style={'opacity': '1'}
                             ),
                         ], style={'flex': '1'}),
                         html.Div([
                             html.Label('Até:', style={'color': COLORS['text'], 'marginBottom': '0.25rem', 'display': 'block', 'fontSize': '0.875rem'}),
-                            dcc.Dropdown(
+                            Dropdown(
                                 id='end-month',
                                 options=month_options,
                                 value=max_date.isoformat() if max_date else None,
-                                clearable=False,
                                 disabled=True,
                                 className='dropdown-settings',
-                                style={'color': '#000'}
+                                style={'opacity': '1'}
                             ),
                         ], style={'flex': '1'}),
                     ], style={'display': 'flex', 'gap': '0.75rem', 'marginBottom': '0.5rem'}),
@@ -198,30 +196,26 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                                     html.Div([
                                         html.Label('Índice:', id='inflation-index-label',
                                                    style={'color': COLORS['text_muted'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}),
-                                        dcc.Dropdown(
+                                        Dropdown(
                                             id='inflation-index-select',
                                             options=[
                                                 {'label': 'IPCA', 'value': 'IPCA'},
                                                 {'label': 'INPC', 'value': 'INPC'},
                                             ],
                                             value='IPCA',
-                                            clearable=False,
-                                            className='dropdown-settings',
-                                            style={'color': '#000', 'opacity': '0.5'},
-                                            disabled=True
+                                            disabled=True,
+                                            className='dropdown-settings'
                                         ),
                                     ], style={'flex': '1'}),
                                     html.Div([
                                         html.Label('Mês Ref.:', id='inflation-ref-label',
                                                    style={'color': COLORS['text_muted'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}),
-                                        dcc.Dropdown(
+                                        Dropdown(
                                             id='inflation-reference-month',
                                             options=month_options,
                                             value=max_date.isoformat() if max_date else None,
-                                            clearable=False,
-                                            className='dropdown-settings',
-                                            style={'color': '#000', 'opacity': '0.5'},
-                                            disabled=True
+                                            disabled=True,
+                                            className='dropdown-settings'
                                         ),
                                     ], style={'flex': '1'}),
                                 ], style={'display': 'flex', 'gap': '0.75rem', 'marginLeft': '1.5rem'}),
@@ -245,13 +239,11 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                             'Comparar:',
                             create_help_icon(HELP_TEXTS['benchmark'], 'help-benchmark'),
                         ], style={'color': COLORS['text'], 'fontSize': '0.875rem', 'marginBottom': '0.25rem', 'display': 'flex', 'alignItems': 'center', 'gap': '0.25rem'}),
-                        dcc.Dropdown(
+                        Dropdown(
                             id='benchmark-select',
                             options=benchmark_options,
                             value='INPC',
-                            clearable=False,
-                            className='dropdown-settings',
-                            style={'color': '#000'}
+                            className='dropdown-settings'
                         ),
                     ], style={'marginBottom': '0.75rem'}),
                     html.Div([
@@ -259,13 +251,11 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                             'Overhead:',
                             create_help_icon(HELP_TEXTS['overhead'], 'help-overhead'),
                         ], style={'color': COLORS['text'], 'fontSize': '0.875rem', 'marginBottom': '0.25rem', 'display': 'flex', 'alignItems': 'center', 'gap': '0.25rem'}),
-                        dcc.Dropdown(
+                        Dropdown(
                             id='overhead-select',
                             options=OVERHEAD_OPTIONS,
                             value=4,
-                            clearable=False,
-                            className='dropdown-settings',
-                            style={'color': '#000'}
+                            className='dropdown-settings'
                         ),
                     ]),
                 ], className='settings-section', style={'marginBottom': '1.5rem'}),
@@ -293,14 +283,12 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                         html.Div([
                             html.Label('Anos:', id='forecast-years-label',
                                        style={'color': COLORS['text_muted'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'block'}),
-                            dcc.Dropdown(
+                            Dropdown(
                                 id='forecast-years',
                                 options=FORECAST_OPTIONS,
                                 value=1,
-                                clearable=False,
-                                className='dropdown-settings',
-                                style={'color': '#000', 'opacity': '0.5'},
-                                disabled=True
+                                disabled=True,
+                                className='dropdown-settings'
                             ),
                         ], style={'flex': '1', 'minWidth': '70px'}),
                         html.Div([
@@ -309,14 +297,12 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                                 create_help_icon(HELP_TEXTS['salary_growth'], 'help-salary-growth'),
                             ], id='growth-rate-label',
                                style={'color': COLORS['text_muted'], 'fontSize': '0.8rem', 'marginBottom': '0.25rem', 'display': 'flex', 'alignItems': 'center', 'gap': '0.25rem'}),
-                            dcc.Dropdown(
+                            Dropdown(
                                 id='growth-rate',
                                 options=GROWTH_RATE_OPTIONS,
                                 value=DEFAULT_GROWTH_RATE,
-                                clearable=False,
-                                className='dropdown-settings',
-                                style={'color': '#000', 'opacity': '0.5'},
-                                disabled=True
+                                disabled=True,
+                                className='dropdown-settings'
                             ),
                         ], style={'flex': '2', 'minWidth': '100px'}),
                     ], className='forecast-controls', style={'display': 'flex', 'gap': '0.5rem', 'alignItems': 'flex-end', 'marginLeft': '1.5rem', 'flexWrap': 'wrap'}),
@@ -487,16 +473,14 @@ def create_position_tab(initial_fig) -> html.Div:
                     create_help_icon(HELP_TEXTS['position_table'], 'help-position-table'),
                 ], className='table-title-group'),
                 html.Div([
-                    dcc.Dropdown(
+                    Dropdown(
                         id='position-export-format',
                         options=[
                             {'label': 'CSV', 'value': 'csv'},
                             {'label': 'Excel', 'value': 'xlsx'}
                         ],
                         value='csv',
-                        clearable=False,
-                        className='dropdown-sm',
-                        style={'color': '#000'}
+                        className='dropdown-sm'
                     ),
                     html.Button('Exportar', id='position-export-btn', className='btn-primary', style={
                         **BUTTON_STYLE,
@@ -526,16 +510,14 @@ def create_position_tab(initial_fig) -> html.Div:
             html.Div([
                 html.H3('Dados Projeção', style={'color': COLORS['text'], 'margin': '0'}),
                 html.Div([
-                    dcc.Dropdown(
+                    Dropdown(
                         id='forecast-export-format',
                         options=[
                             {'label': 'CSV', 'value': 'csv'},
                             {'label': 'Excel', 'value': 'xlsx'}
                         ],
                         value='csv',
-                        clearable=False,
-                        className='dropdown-sm',
-                        style={'color': '#000'}
+                        className='dropdown-sm'
                     ),
                     html.Button('Exportar', id='forecast-export-btn', className='btn-primary', style={
                         **BUTTON_STYLE,
@@ -592,16 +574,14 @@ def create_contributions_tab(contributions_fig) -> html.Div:
                     create_help_icon(HELP_TEXTS['contributions_table'], 'help-contributions-table'),
                 ], className='table-title-group'),
                 html.Div([
-                    dcc.Dropdown(
+                    Dropdown(
                         id='contributions-export-format',
                         options=[
                             {'label': 'CSV', 'value': 'csv'},
                             {'label': 'Excel', 'value': 'xlsx'}
                         ],
                         value='csv',
-                        clearable=False,
-                        className='dropdown-sm',
-                        style={'color': '#000'}
+                        className='dropdown-sm'
                     ),
                     html.Button('Exportar', id='contributions-export-btn', className='btn-primary', style={
                         **BUTTON_STYLE,

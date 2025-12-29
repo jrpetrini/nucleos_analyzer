@@ -5,6 +5,27 @@ Reusable UI components for Nucleos Analyzer dashboard.
 
 from dash import html, dcc
 
+
+def Dropdown(id, options, value, className='', disabled=False, **kwargs):
+    """Create a dropdown with sensible defaults (no search, not clearable)."""
+    style = {'color': '#000'}
+    if disabled:
+        style['opacity'] = '0.5'
+    if 'style' in kwargs:
+        style.update(kwargs.pop('style'))
+    return dcc.Dropdown(
+        id=id,
+        options=options,
+        value=value,
+        clearable=False,
+        searchable=False,
+        disabled=disabled,
+        className=className,
+        style=style,
+        **kwargs
+    )
+
+
 # Color palette - Nucleos-inspired light theme
 COLORS = {
     'primary': '#1e40af',      # Blue 800 (Nucleos blue)
@@ -204,14 +225,7 @@ def create_dropdown_with_label(label: str, dropdown_id: str, options: list,
     size_class = f'dropdown-{size}'
     components = [
         html.Label(label, style={'color': COLORS['text'], 'marginRight': '0.5rem'}),
-        dcc.Dropdown(
-            id=dropdown_id,
-            options=options,
-            value=value,
-            clearable=False,
-            className=size_class,
-            style={'color': '#000'}
-        )
+        Dropdown(id=dropdown_id, options=options, value=value, className=size_class)
     ]
     if help_text:
         components.append(create_help_icon(help_text, f'help-{dropdown_id}'))
@@ -221,16 +235,14 @@ def create_dropdown_with_label(label: str, dropdown_id: str, options: list,
 def create_export_controls(export_format_id: str, export_btn_id: str) -> html.Div:
     """Create export format dropdown and button."""
     return html.Div([
-        dcc.Dropdown(
+        Dropdown(
             id=export_format_id,
             options=[
                 {'label': 'CSV', 'value': 'csv'},
                 {'label': 'Excel', 'value': 'xlsx'}
             ],
             value='csv',
-            clearable=False,
-            className='dropdown-sm',
-            style={'color': '#000'}
+            className='dropdown-sm'
         ),
         html.Button('Exportar', id=export_btn_id, className='btn-primary', style={
             **BUTTON_STYLE,
