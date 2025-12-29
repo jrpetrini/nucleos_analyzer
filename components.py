@@ -5,18 +5,34 @@ Reusable UI components for Nucleos Analyzer dashboard.
 
 from dash import html, dcc
 
-# Color palette
+# Color palette - Nucleos-inspired light theme
 COLORS = {
-    'primary': '#6366f1',      # Indigo
-    'secondary': '#8b5cf6',    # Purple
-    'accent': '#06b6d4',       # Cyan
-    'participant': '#10b981',  # Emerald
-    'sponsor': '#f59e0b',      # Amber
-    'background': '#0f172a',   # Slate 900
-    'card': '#1e293b',         # Slate 800
-    'text': '#f1f5f9',         # Slate 100
-    'text_muted': '#94a3b8',   # Slate 400
-    'grid': '#334155',         # Slate 700
+    'primary': '#1e40af',      # Blue 800 (Nucleos blue)
+    'secondary': '#3b82f6',    # Blue 500
+    'accent': '#0891b2',       # Cyan 600
+    'participant': '#059669',  # Emerald 600
+    'sponsor': '#d97706',      # Amber 600
+    'danger': '#dc2626',       # Red 600
+    'background': '#f1f5f9',   # Slate 100 (light gray)
+    'card': '#ffffff',         # White
+    'text': '#1e293b',         # Slate 800 (dark)
+    'text_muted': '#64748b',   # Slate 500
+    'grid': '#e2e8f0',         # Slate 200
+}
+
+# Common button styles
+BUTTON_STYLE = {
+    'backgroundColor': COLORS['primary'],
+    'color': '#ffffff',
+    'border': 'none',
+    'borderRadius': '0.5rem',
+    'padding': '0.5rem 1rem',
+    'cursor': 'pointer',
+}
+
+BUTTON_DANGER_STYLE = {
+    **BUTTON_STYLE,
+    'backgroundColor': COLORS['danger'],
 }
 
 # Benchmark colors
@@ -217,8 +233,7 @@ def create_export_controls(export_format_id: str, export_btn_id: str) -> html.Di
             style={'color': '#000'}
         ),
         html.Button('Exportar', id=export_btn_id, className='btn-primary', style={
-            'backgroundColor': COLORS['primary'],
-            'color': COLORS['text'],
+            **BUTTON_STYLE,
             'marginLeft': '0.5rem'
         }),
     ], className='export-controls')
@@ -263,7 +278,7 @@ def create_tab_style() -> tuple:
     }
     selected_style = {
         'backgroundColor': COLORS['primary'],
-        'color': COLORS['text'],
+        'color': '#ffffff',  # White text on blue background
         'border': 'none',
         'padding': '1rem 2rem'
     }

@@ -139,7 +139,7 @@ def create_position_figure(df_position: pd.DataFrame, log_scale: bool = False,
             xanchor='left',
             x=0.01,
             font=dict(color=COLORS['text'], size=14),
-            bgcolor='rgba(30, 41, 59, 0.8)',
+            bgcolor='rgba(255, 255, 255, 0.9)',
             borderwidth=0,
         )
     )
@@ -286,7 +286,7 @@ def create_contributions_figure(df_contributions: pd.DataFrame,
             xanchor='left',
             x=0.01,
             font=dict(color=COLORS['text'], size=14),
-            bgcolor='rgba(30, 41, 59, 0.8)',
+            bgcolor='rgba(255, 255, 255, 0.9)',
             borderwidth=0,
         )
     )

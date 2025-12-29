@@ -660,12 +660,12 @@ def register_callbacks(app):
         Input('data-loaded', 'data')
     )
     def update_upload_button_style(data_loaded):
-        """Update upload button color: amber when empty, primary when loaded."""
+        """Update upload button color: red when empty, primary when loaded."""
         base_style = {
             'width': '100%',
             'textAlign': 'center',
             'padding': '0.75rem 1rem',
-            'color': COLORS['text'],
+            'color': '#ffffff',
             'border': 'none',
             'borderRadius': '0.5rem',
             'cursor': 'pointer',
@@ -674,7 +674,7 @@ def register_callbacks(app):
         if data_loaded:
             base_style['backgroundColor'] = COLORS['primary']
         else:
-            base_style['backgroundColor'] = COLORS['sponsor']
+            base_style['backgroundColor'] = COLORS['danger']
         return base_style
 
     @callback(

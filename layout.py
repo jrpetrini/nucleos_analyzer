@@ -7,7 +7,8 @@ import pandas as pd
 from dash import dcc, html, dash_table
 
 from components import (
-    COLORS, OVERHEAD_OPTIONS, FORECAST_OPTIONS, GROWTH_RATE_OPTIONS, DEFAULT_GROWTH_RATE,
+    COLORS, BUTTON_STYLE, BUTTON_DANGER_STYLE,
+    OVERHEAD_OPTIONS, FORECAST_OPTIONS, GROWTH_RATE_OPTIONS, DEFAULT_GROWTH_RATE,
     HELP_TEXTS, create_help_icon, create_data_table_styles, create_tab_style
 )
 from figures import create_position_figure, create_contributions_figure, create_empty_figure
@@ -123,13 +124,10 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
                                 children=html.Div('📄 Carregar PDF'),
                                 className='upload-btn-settings',
                                 style={
-                                    'backgroundColor': COLORS['primary'] if has_data else COLORS['sponsor'],
-                                    'color': COLORS['text'],
+                                    **(BUTTON_STYLE if has_data else BUTTON_DANGER_STYLE),
                                     'width': '100%',
                                     'textAlign': 'center',
                                     'padding': '0.75rem 1rem',
-                                    'borderRadius': '0.5rem',
-                                    'cursor': 'pointer',
                                     'marginBottom': '1rem',
                                     'boxSizing': 'border-box',
                                 },
@@ -350,15 +348,11 @@ def create_settings_panel(month_options: list, max_date, min_date, has_data: boo
 
                 # OK button
                 html.Button('OK', id='settings-ok-btn', style={
+                    **BUTTON_STYLE,
                     'width': '100%',
                     'padding': '0.75rem',
-                    'backgroundColor': COLORS['primary'],
-                    'color': COLORS['text'],
-                    'border': 'none',
-                    'borderRadius': '0.5rem',
                     'fontSize': '1rem',
                     'fontWeight': '500',
-                    'cursor': 'pointer',
                     'marginTop': '0.5rem',
                 }),
 
@@ -521,8 +515,7 @@ def create_position_tab(initial_fig) -> html.Div:
                         style={'color': '#000'}
                     ),
                     html.Button('Exportar', id='position-export-btn', className='btn-primary', style={
-                        'backgroundColor': COLORS['primary'],
-                        'color': COLORS['text'],
+                        **BUTTON_STYLE,
                         'marginLeft': '0.5rem'
                     }),
                 ], className='export-controls'),
@@ -561,8 +554,7 @@ def create_position_tab(initial_fig) -> html.Div:
                         style={'color': '#000'}
                     ),
                     html.Button('Exportar', id='forecast-export-btn', className='btn-primary', style={
-                        'backgroundColor': COLORS['primary'],
-                        'color': COLORS['text'],
+                        **BUTTON_STYLE,
                         'marginLeft': '0.5rem'
                     }),
                 ], className='export-controls'),
@@ -628,8 +620,7 @@ def create_contributions_tab(contributions_fig) -> html.Div:
                         style={'color': '#000'}
                     ),
                     html.Button('Exportar', id='contributions-export-btn', className='btn-primary', style={
-                        'backgroundColor': COLORS['primary'],
-                        'color': COLORS['text'],
+                        **BUTTON_STYLE,
                         'marginLeft': '0.5rem'
                     }),
                 ], className='export-controls'),
