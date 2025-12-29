@@ -224,7 +224,7 @@ html, body {
    ----------------------------------------------------------------------------- */
 .header {
     text-align: center;
-    padding: var(--container-padding);
+    padding: 0.25rem var(--container-padding);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -234,7 +234,12 @@ html, body {
 
 .header-title {
     margin-bottom: 0;
-    font-size: var(--title-size);
+    font-size: 1.5rem;
+}
+
+.header p {
+    margin: 0.1rem 0 0 0;
+    font-size: 0.875rem;
 }
 
 

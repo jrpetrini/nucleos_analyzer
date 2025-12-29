@@ -26,7 +26,8 @@ def create_header() -> html.Div:
             }),
             html.P('Análise de Previdência Privada', style={
                 'color': COLORS['text_muted'],
-                'marginTop': '0.5rem'
+                'marginTop': '0',
+                'marginBottom': '0',
             })
         ]),
         # Settings button - top right corner
@@ -37,15 +38,15 @@ def create_header() -> html.Div:
             title='Configurações',
             style={
                 'position': 'absolute',
-                'top': '1rem',
-                'right': '1rem',
+                'top': '0.25rem',
+                'right': '0.5rem',
                 'backgroundColor': COLORS['primary'],
                 'border': 'none',
-                'borderRadius': '0.5rem',
+                'borderRadius': '0.375rem',
                 'fontSize': '1.5rem',
                 'cursor': 'pointer',
                 'padding': '0.4rem 0.6rem',
-                'boxShadow': '0 2px 4px rgba(0, 0, 0, 0.1)',
+                'boxShadow': '0 1px 2px rgba(0, 0, 0, 0.1)',
             }
         ),
     ], className='header', style={
