@@ -1229,11 +1229,11 @@ def register_callbacks(app):
             'flex': '1',
         }
 
-        # Page container style - lock scroll when panel is open
+        # Page container style - always scrollable, lock when panel is open
         page_style = {
             'backgroundColor': COLORS['background'],
-            'overflow': 'hidden' if new_is_open else 'auto',
-            'height': '100vh' if new_is_open else 'auto',
+            'overflowY': 'hidden' if new_is_open else 'auto',
+            'height': '100vh',
         }
 
         return panel_base_style, overlay_style, new_is_open, content_style, page_style
@@ -1288,11 +1288,11 @@ def register_callbacks(app):
             'flex': '1',
         }
 
-        # Page container style - lock scroll when panel is open
+        # Page container style - always 100vh for sticky header, lock scroll when panel open
         page_style = {
             'backgroundColor': COLORS['background'],
-            'overflow': 'hidden' if is_open else 'auto',
-            'height': '100vh' if is_open else 'auto',
+            'overflowY': 'hidden' if is_open else 'auto',
+            'height': '100vh',
         }
 
         return panel_base_style, overlay_style, is_open, content_style, page_style

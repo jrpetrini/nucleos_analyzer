@@ -159,10 +159,21 @@ html, body {
 }
 
 /* Settings button hover effect */
+.settings-btn {
+    transition: filter 0.2s ease;
+}
+
 .settings-btn:hover {
-    opacity: 1 !important;
-    transform: rotate(30deg);
+    filter: brightness(1.1);
+}
+
+.settings-btn .gear-icon {
+    display: inline-block;
     transition: transform 0.2s ease;
+}
+
+.settings-btn:hover .gear-icon {
+    transform: rotate(30deg);
 }
 
 /* OK button hover effect */
@@ -214,7 +225,11 @@ html, body {
 .header {
     text-align: center;
     padding: var(--container-padding);
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: #f1f5f9;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .header-title {
@@ -222,11 +237,6 @@ html, body {
     font-size: var(--title-size);
 }
 
-.github-link {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-}
 
 /* -----------------------------------------------------------------------------
    Summary Cards
@@ -590,10 +600,6 @@ html, body {
         text-align: center;
     }
 
-    /* GitHub link: hide on mobile */
-    .github-link {
-        display: none !important;
-    }
 
     /* Tab content: minimal padding */
     .tab-content {
@@ -668,7 +674,7 @@ html, body {
 @media print {
     .upload-btn,
     .export-controls,
-    .github-link {
+    .settings-btn {
         display: none !important;
     }
 

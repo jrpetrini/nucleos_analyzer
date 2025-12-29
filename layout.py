@@ -17,51 +17,35 @@ from benchmarks import AVAILABLE_BENCHMARKS
 
 
 def create_header() -> html.Div:
-    """Create the page header with title, GitHub link, and settings button."""
+    """Create the page header with title and settings button."""
     return html.Div([
         html.Div([
-            # Title row with gear icon
-            html.Div([
-                # Spacer to balance the gear icon on the right
-                html.Div(style={'width': '2.5rem'}),
-                html.H1('Nucleos Analyzer', className='header-title', style={
-                    'color': COLORS['text'],
-                    'marginBottom': '0',
-                }),
-                html.Button(
-                    '⚙️',
-                    id='settings-btn',
-                    className='settings-btn',
-                    title='Configurações',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'fontSize': '1.75rem',
-                        'cursor': 'pointer',
-                        'padding': '0.25rem',
-                        'opacity': '0.7',
-                        'marginLeft': '0.5rem',
-                    }
-                ),
-            ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'}),
+            html.H1('Nucleos Analyzer', className='header-title', style={
+                'color': COLORS['text'],
+                'marginBottom': '0',
+            }),
             html.P('Análise de Previdência Privada', style={
                 'color': COLORS['text_muted'],
                 'marginTop': '0.5rem'
             })
         ]),
-        html.A(
-            html.Img(
-                src='https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
-                style={'height': '32px', 'opacity': '0.7'}
-            ),
-            href='https://github.com/jrpetrini/nucleos_analyzer',
-            target='_blank',
-            title='Ver código no GitHub',
-            className='github-link',
+        # Settings button - top right corner
+        html.Button(
+            html.Span('⚙️', className='gear-icon'),
+            id='settings-btn',
+            className='settings-btn',
+            title='Configurações',
             style={
                 'position': 'absolute',
                 'top': '1rem',
                 'right': '1rem',
+                'backgroundColor': COLORS['primary'],
+                'border': 'none',
+                'borderRadius': '0.5rem',
+                'fontSize': '1.5rem',
+                'cursor': 'pointer',
+                'padding': '0.4rem 0.6rem',
+                'boxShadow': '0 2px 4px rgba(0, 0, 0, 0.1)',
             }
         ),
     ], className='header', style={
